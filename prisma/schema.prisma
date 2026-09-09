@@ -1,0 +1,116 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id            String        @id @default(cuid())
+  name          String
+  email         String        @unique
+  passwordHash  String?
+  image         String?
+  role          String        @default("USER") // USER, ADMIN
+  createdAt     DateTime      @default(now())
+  updatedAt     DateTime      @updatedAt
+
+  createdEvents Event[]       @relation("EventCreator")
+  memberships   EventMember[]
+  families      Family[]
+}
+
+model Event {
+  id              String        @id @default(cuid())
+  title           String
+  description     String?
+  startDate       DateTime
+  endDate         DateTime
+  locationName    String?
+  latitude        Float?
+  longitude       Float?
+  pixKey          String?       // Chave Pix do organizador
+  pixKeyType      String?       // CPF, CNPJ, EMAIL, PHONE, RANDOM
+  pixReceiverName String?       // Nome completo do recebedor Pix
+  pixCity         String?       @default("BRASILIA")
+  minPayingAge    Int           @default(12) // Idade mínima para pagar (padrão 12)
+  enableBbq       Boolean       @default(true)
+  inviteCode      String        @unique @default(cuid())
+  creatorId       String
+  creator         User          @relation("EventCreator", fields: [creatorId], references: [id], onDelete: Cascade)
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+
+  members         EventMember[]
+  costs           Cost[]
+  families        Family[]
+  bbqConfig       BbqConfig?
+}
+
+model EventMember {
+  id        String    @id @default(cuid())
+  eventId   String
+  userId    String
+  role      String    @default("PARTICIPANT") // OWNER, CO_ORGANIZER, PARTICIPANT
+  canEdit   Boolean   @default(false)
+  event     Event     @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  createdAt DateTime  @default(now())
+
+  @@unique([eventId, userId])
+}
+
+model Cost {
+  id          String    @id @default(cuid())
+  eventId     String
+  name        String    // Ex: "Aluguel do Rancho", "Carvão", "Limpeza"
+  amount      Float
+  dueDate     DateTime?
+  category    String?   // ACOMODACAO, ALIMENTACAO, LIMPEZA, OUTROS
+  event       Event     @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+}
+
+model Family {
+  id               String        @id @default(cuid())
+  eventId          String
+  responsibleId    String?
+  responsible      User?         @relation(fields: [responsibleId], references: [id])
+  familyName       String        // Ex: "Família Curti"
+  responsibleName  String        // Nome do responsável
+  responsibleEmail String?
+  responsiblePhone String?
+  paymentStatus    String        @default("PENDING") // PENDING, PAID
+  receiptNote      String?       // Observação ou link do comprovante
+  event            Event         @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  members          Participant[]
+  createdAt        DateTime      @default(now())
+  updatedAt        DateTime      @updatedAt
+}
+
+model Participant {
+  id          String    @id @default(cuid())
+  familyId    String
+  name        String
+  gender      String    @default("OTHER") // MALE, FEMALE, OTHER
+  age         Int
+  isPaying    Boolean   @default(true)
+  family      Family    @relation(fields: [familyId], references: [id], onDelete: Cascade)
+  createdAt   DateTime  @default(now())
+}
+
+model BbqConfig {
+  id               String   @id @default(cuid())
+  eventId          String   @unique
+  event            Event    @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  meatGramsMale    Int      @default(450)
+  meatGramsFemale  Int      @default(350)
+  meatGramsChild   Int      @default(180)
+  sodaMlPerPerson  Int      @default(1000)
+  juiceMlPerPerson Int      @default(500)
+  waterMlPerPerson Int      @default(500)
+  daysCount        Int      @default(1)
+}

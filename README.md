@@ -1,36 +1,74 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# 🥩 OrganizaAI - Gestão de Confraternizações, Rateio Familiar & Churrascômetro
 
-## Getting Started
+> SaaS inteligente para organização de confraternizações de fim de ano, aluguéis de rancho/sítio, rateio financeiro por família com regras de isenção de idade, cobrança via Pix custo zero e churrascômetro com lista para WhatsApp.
 
-First, run the development server:
+---
 
+## ✨ Principais Funcionalidades
+
+- 👨‍👩‍👧‍👦 **Rateio Inteligente por Família**: Agrupamento por núcleos familiares com responsável financeiro unificado.
+- 🎯 **Regras de Isenção por Idade**: Idade mínima configurável (padrão: 12 anos). Participantes menores são isentos de cota.
+- ⚡ **Cobrança Pix Custo Zero (BR Code EMV)**: Geração de QR Code e Copia e Cola instantâneos na chave do organizador com o valor exato da família.
+- 🍖 **Churrascômetro & Lista de Compras**:
+  - Dimensionamento de carnes (bovina, linguiça, frango, suíno/queijo) por dia e perfil demográfico (homens, mulheres, crianças).
+  - Dimensionamento de bebidas não-alcoólicas (refrigerantes, sucos, água mineral).
+  - Insumos de apoio (carvão, pão de alho, sal grosso, descartáveis).
+  - Botão de compartilhamento formatado com 1 clique para WhatsApp.
+- 🔗 **Link de Convite Público Sem Fricção**: Os convidados confirmam presença e membros da família sem necessidade de login.
+- 👥 **Gestão de Co-Organizadores / Admins**: Atribuição de permissões de edição para outros usuários por e-mail.
+- 🌓 **Design System & Temas**: Suporte a temas Claro, Escuro e Sistema (via `next-themes` e Tailwind CSS v4).
+- 🤖 **Swagger / OpenAPI 3.0**: Especificação `/api-docs` pronta para conectar agentes de IA e bots (WhatsApp / Telegram).
+
+---
+
+## 🛠️ Stack Tecnológica
+
+- **Framework**: [Next.js 16 (App Router)](https://nextjs.org/) + TypeScript
+- **ORM & Banco de Dados**: [Prisma ORM](https://www.prisma.io/) + SQLite (Dev) / PostgreSQL (Prod)
+- **Estilização**: Tailwind CSS v4 + Lucide Icons + `next-themes`
+- **Autenticação**: Sessões JWT seguras com `jose` e `bcryptjs`
+- **Documentação da API**: OpenAPI 3.0 / Swagger UI em `/api-docs`
+
+---
+
+## 🚀 Como Executar Localmente
+
+### 1. Clonar o repositório
 ```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+git clone https://github.com/HenriqueCurti/organizaAI.git
+cd organizaAI
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+### 2. Instalar dependências
+```bash
+npm install
+```
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+### 3. Configurar variáveis de ambiente
+Copie o arquivo de exemplo:
+```bash
+cp .env.example .env
+```
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+### 4. Executar migrations do Prisma e Seed inicial
+```bash
+npx prisma db push
+npx tsx prisma/seed.ts
+```
 
-## Learn More
+### 5. Iniciar o servidor de desenvolvimento
+```bash
+npm run dev
+```
 
-To learn more about Next.js, take a look at the following resources:
+Acesse [http://localhost:3000](http://localhost:3000) no seu navegador.
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+### Credenciais de Demonstração (Seed):
+- **E-mail**: `henrique@organizaai.app`
+- **Senha**: `senha123`
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+---
 
-## Deploy on Vercel
+## 📖 Documentação da API
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+Acesse [http://localhost:3000/api-docs](http://localhost:3000/api-docs) com a aplicação em execução para visualizar a documentação interativa do Swagger.
