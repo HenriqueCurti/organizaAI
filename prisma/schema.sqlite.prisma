@@ -3,7 +3,7 @@ generator client {
 }
 
 datasource db {
-  provider = "postgresql"
+  provider = "sqlite"
   url      = env("DATABASE_URL")
 }
 
@@ -23,33 +23,33 @@ model User {
 }
 
 model Event {
-  id              String        @id @default(cuid())
-  title           String
-  description     String?
-  startDate       DateTime
-  endDate         DateTime
-  locationName    String?
-  latitude        Float?
-  longitude       Float?
-  pixKey          String?       // Chave Pix do organizador
-  pixKeyType      String?       // CPF, CNPJ, EMAIL, PHONE, RANDOM
-  pixReceiverName String?       // Nome completo do recebedor Pix
-  pixCity         String?       @default("BRASILIA")
+  id                       String        @id @default(cuid())
+  title                    String
+  description              String?
+  startDate                DateTime
+  endDate                  DateTime
+  locationName             String?
+  latitude                 Float?
+  longitude                Float?
+  pixKey                   String?       // Chave Pix do organizador
+  pixKeyType               String?       // CPF, CNPJ, EMAIL, PHONE, RANDOM
+  pixReceiverName          String?       // Nome completo do recebedor Pix
+  pixCity                  String?       @default("BRASILIA")
   minPayingAge             Int           @default(12) // Idade mínima para pagar (padrão 12)
   enableBbq                Boolean       @default(true)
   creationMode             String        @default("DETAILED") // QUICK, DETAILED
   estimatedAttendees       Int?          // Previsão total de participantes (ex: 50)
   estimatedPayingAttendees Int?          // Previsão de pagantes (ex: 35)
   inviteCode               String        @unique @default(cuid())
-  creatorId       String
-  creator         User          @relation("EventCreator", fields: [creatorId], references: [id], onDelete: Cascade)
-  createdAt       DateTime      @default(now())
-  updatedAt       DateTime      @updatedAt
+  creatorId                String
+  creator                  User          @relation("EventCreator", fields: [creatorId], references: [id], onDelete: Cascade)
+  createdAt                DateTime      @default(now())
+  updatedAt                DateTime      @updatedAt
 
-  members         EventMember[]
-  costs           Cost[]
-  families        Family[]
-  bbqConfig       BbqConfig?
+  members                  EventMember[]
+  costs                    Cost[]
+  families                 Family[]
+  bbqConfig                BbqConfig?
 }
 
 model EventMember {
