@@ -15,6 +15,14 @@ const createEventSchema = z.object({
   pixReceiverName: z.string().optional(),
   minPayingAge: z.coerce.number().min(0).default(12),
   enableBbq: z.boolean().default(true),
+  creationMode: z.enum(["QUICK", "DETAILED"]).default("DETAILED"),
+  estimatedAttendees: z.coerce.number().min(1).optional().nullable(),
+  estimatedPayingAttendees: z.coerce.number().min(0).optional().nullable(),
+  initialCosts: z.array(z.object({
+    name: z.string().min(1),
+    amount: z.coerce.number().positive(),
+    category: z.string().optional().default("ACOMODACAO")
+  })).optional(),
 });
 
 export async function GET() {
@@ -61,14 +69,22 @@ export async function GET() {
 
     // Métricas rápidas
     const totalCost = event.costs.reduce((acc, c) => acc + c.amount, 0);
-    const totalParticipants = event.families.reduce(
+    const actualParticipants = event.families.reduce(
       (acc, f) => acc + f.members.length,
       0
     );
-    const payingParticipants = event.families.reduce(
+    const actualPayingParticipants = event.families.reduce(
       (acc, f) => acc + f.members.filter((m) => m.age >= event.minPayingAge).length,
       0
     );
+
+    const isEstimatedParticipants = actualParticipants === 0 && Boolean(event.estimatedAttendees);
+    const totalParticipants = isEstimatedParticipants
+      ? (event.estimatedAttendees || 0)
+      : actualParticipants;
+    const payingParticipants = isEstimatedParticipants
+      ? (event.estimatedPayingAttendees ?? event.estimatedAttendees ?? 0)
+      : actualPayingParticipants;
 
     return {
       ...event,
@@ -77,6 +93,9 @@ export async function GET() {
       totalCost,
       totalParticipants,
       payingParticipants,
+      actualParticipants,
+      actualPayingParticipants,
+      isEstimatedParticipants,
       isPast: new Date(event.endDate) < now,
     };
   });
@@ -112,6 +131,10 @@ export async function POST(req: Request) {
       pixReceiverName,
       minPayingAge,
       enableBbq,
+      creationMode,
+      estimatedAttendees,
+      estimatedPayingAttendees,
+      initialCosts,
     } = parsed.data;
 
     const start = new Date(startDate);
@@ -142,6 +165,9 @@ export async function POST(req: Request) {
         pixReceiverName: pixReceiverName || user.name,
         minPayingAge,
         enableBbq,
+        creationMode,
+        estimatedAttendees: estimatedAttendees ?? null,
+        estimatedPayingAttendees: estimatedPayingAttendees ?? null,
         inviteCode,
         creatorId: user.id,
         members: {
@@ -151,6 +177,13 @@ export async function POST(req: Request) {
             canEdit: true,
           },
         },
+        costs: initialCosts && initialCosts.length > 0 ? {
+          create: initialCosts.map((c) => ({
+            name: c.name,
+            amount: c.amount,
+            category: c.category || "ACOMODACAO",
+          })),
+        } : undefined,
         bbqConfig: {
           create: {
             daysCount,

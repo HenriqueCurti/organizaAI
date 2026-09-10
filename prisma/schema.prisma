@@ -35,9 +35,12 @@ model Event {
   pixKeyType      String?       // CPF, CNPJ, EMAIL, PHONE, RANDOM
   pixReceiverName String?       // Nome completo do recebedor Pix
   pixCity         String?       @default("BRASILIA")
-  minPayingAge    Int           @default(12) // Idade mínima para pagar (padrão 12)
-  enableBbq       Boolean       @default(true)
-  inviteCode      String        @unique @default(cuid())
+  minPayingAge             Int           @default(12) // Idade mínima para pagar (padrão 12)
+  enableBbq                Boolean       @default(true)
+  creationMode             String        @default("DETAILED") // QUICK, DETAILED
+  estimatedAttendees       Int?          // Previsão total de participantes (ex: 50)
+  estimatedPayingAttendees Int?          // Previsão de pagantes (ex: 35)
+  inviteCode               String        @unique @default(cuid())
   creatorId       String
   creator         User          @relation("EventCreator", fields: [creatorId], references: [id], onDelete: Cascade)
   createdAt       DateTime      @default(now())

@@ -28,6 +28,8 @@ import {
   AlertCircle,
   Send,
   History,
+  FileText,
+  Zap,
 } from "lucide-react";
 
 interface Member {
@@ -92,6 +94,13 @@ interface EventDetail {
   locationName: string | null;
   minPayingAge: number;
   enableBbq: boolean;
+  creationMode?: string;
+  estimatedAttendees?: number | null;
+  estimatedPayingAttendees?: number | null;
+  isEstimatedRateio?: boolean;
+  actualPayingParticipants?: number;
+  actualExemptParticipants?: number;
+  actualTotalParticipants?: number;
   inviteCode: string;
   isOwner: boolean;
   canEdit: boolean;
@@ -177,6 +186,12 @@ export default function EventDetailPage({
   const [newMemberCanEdit, setNewMemberCanEdit] = useState(true);
   const [memberActionLoading, setMemberActionLoading] = useState(false);
   const [memberMessage, setMemberMessage] = useState<{ type: "success" | "error"; text: string } | null>(null);
+
+  // Modal de Importação Rápida da Lista do WhatsApp
+  const [showImportModal, setShowImportModal] = useState(false);
+  const [importText, setImportText] = useState("");
+  const [importLoading, setImportLoading] = useState(false);
+  const [importFeedback, setImportFeedback] = useState<{ type: "success" | "error"; text: string } | null>(null);
 
   const fetchEvent = async () => {
     try {
@@ -558,6 +573,42 @@ export default function EventDetailPage({
     setTimeout(() => setCopiedBbq(false), 2500);
   };
 
+  const handleImportWhatsAppList = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!importText.trim()) return;
+    setImportLoading(true);
+    setImportFeedback(null);
+
+    try {
+      const res = await fetch(`/api/eventos/${id}/familias/import`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ rawText: importText }),
+      });
+
+      const data = await res.json();
+      if (res.ok) {
+        setImportFeedback({
+          type: "success",
+          text: `Sucesso! Foram criadas ${data.createdFamiliesCount} famílias (${data.createdMembersCount} pessoas).`,
+        });
+        setImportText("");
+        await fetchEvent();
+        await fetchBbq();
+        setTimeout(() => {
+          setShowImportModal(false);
+          setImportFeedback(null);
+        }, 1800);
+      } else {
+        setImportFeedback({ type: "error", text: data.error || "Erro ao processar lista" });
+      }
+    } catch {
+      setImportFeedback({ type: "error", text: "Falha de conexão com o servidor" });
+    } finally {
+      setImportLoading(false);
+    }
+  };
+
   if (loading) {
     return (
       <div className="min-h-screen flex flex-col bg-slate-50 dark:bg-[#080d1a]">
@@ -711,7 +762,7 @@ export default function EventDetailPage({
                 R$ {event.costPerQuota.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}
               </span>
               <span className="text-[10px] sm:text-[11px] text-emerald-600/80 dark:text-emerald-400/80">
-                {event.minPayingAge}+ anos pagam
+                {event.isEstimatedRateio ? "Estimativa prevista" : `${event.minPayingAge}+ anos pagam`}
               </span>
             </div>
 
@@ -723,7 +774,9 @@ export default function EventDetailPage({
                 {event.totalPayingParticipants + event.totalExemptParticipants} pessoas
               </span>
               <span className="text-[10px] sm:text-[11px] text-slate-400">
-                {event.totalPayingParticipants} pagantes | {event.totalExemptParticipants} isentos
+                {event.isEstimatedRateio
+                  ? `${event.totalPayingParticipants} pagantes previstos`
+                  : `${event.totalPayingParticipants} pagantes | ${event.totalExemptParticipants} isentos`}
               </span>
             </div>
 
@@ -822,15 +875,89 @@ export default function EventDetailPage({
               </div>
 
               {event.canEdit && (
-                <button
-                  onClick={() => setShowAddFamily(true)}
-                  className="inline-flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-semibold bg-emerald-600 hover:bg-emerald-700 text-white transition-all shadow-sm self-start sm:self-auto"
-                >
-                  <UserPlus className="w-4 h-4" />
-                  Adicionar Família Manualmente
-                </button>
+                <div className="flex flex-wrap items-center gap-2 self-start sm:self-auto">
+                  <button
+                    onClick={() => setShowImportModal(true)}
+                    className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-semibold bg-emerald-50 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300 hover:bg-emerald-100 dark:hover:bg-emerald-900/60 transition-all border border-emerald-200 dark:border-emerald-800"
+                  >
+                    <FileText className="w-3.5 h-3.5" />
+                    Colar Lista do WhatsApp
+                  </button>
+
+                  <button
+                    onClick={() => setShowAddFamily(true)}
+                    className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-semibold bg-emerald-600 hover:bg-emerald-700 text-white transition-all shadow-sm"
+                  >
+                    <UserPlus className="w-3.5 h-3.5" />
+                    Adicionar Família
+                  </button>
+                </div>
               )}
             </div>
+
+            {/* Banner de Modo Estimado quando não há famílias confirmadas ainda */}
+            {event.isEstimatedRateio && (
+              <div className="p-4 sm:p-5 rounded-2xl bg-gradient-to-r from-amber-50 to-emerald-50 dark:from-amber-950/30 dark:to-emerald-950/30 border border-amber-200/70 dark:border-amber-800/60 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                <div className="flex items-start gap-3">
+                  <div className="p-2.5 rounded-xl bg-amber-500/10 text-amber-600 dark:text-amber-400 shrink-0 mt-0.5">
+                    <Zap className="w-5 h-5" />
+                  </div>
+                  <div>
+                    <h4 className="text-xs sm:text-sm font-bold text-slate-900 dark:text-white flex flex-wrap items-center gap-2">
+                      <span>Modo Estimativa Ativo ({event.totalPayingParticipants} pagantes previstos)</span>
+                      <span className="text-[10px] bg-amber-100 dark:bg-amber-900/60 text-amber-800 dark:text-amber-300 px-2 py-0.5 rounded-full font-bold">
+                        Cota: R$ {event.costPerQuota.toFixed(2)}
+                      </span>
+                    </h4>
+                    <p className="text-xs text-slate-600 dark:text-slate-400 mt-1 leading-relaxed">
+                      O rateio está provisionado com base na quantidade estimada de participantes. Conforme seus convidados confirmarem presença pelo link ou você colar a lista, os valores se ajustarão automaticamente.
+                    </p>
+                  </div>
+                </div>
+
+                <div className="flex flex-wrap items-center gap-2 shrink-0">
+                  <button
+                    onClick={handleCopyInvite}
+                    className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold shadow-sm transition-all"
+                  >
+                    <Share2 className="w-3.5 h-3.5" />
+                    Enviar Convite
+                  </button>
+                  <button
+                    onClick={() => setShowImportModal(true)}
+                    className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-700 text-xs font-semibold hover:bg-slate-50 transition-all"
+                  >
+                    <FileText className="w-3.5 h-3.5" />
+                    Colar Lista
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {/* Progresso de Confirmações quando já existem famílias e havia estimativa */}
+            {event.families.length > 0 && event.estimatedPayingAttendees && event.estimatedPayingAttendees > 0 && (
+              <div className="p-3.5 sm:p-4 rounded-xl bg-slate-100 dark:bg-slate-900/60 border border-slate-200 dark:border-slate-800 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs">
+                <div className="flex items-center gap-2">
+                  <span className="font-semibold text-slate-700 dark:text-slate-300">
+                    Progresso das Confirmações:
+                  </span>
+                  <span className="font-bold text-emerald-600 dark:text-emerald-400">
+                    {event.actualPayingParticipants ?? event.totalPayingParticipants} de {event.estimatedPayingAttendees} pagantes confirmados
+                  </span>
+                  <span className="text-slate-400">
+                    ({Math.min(100, Math.round(((event.actualPayingParticipants ?? event.totalPayingParticipants) / event.estimatedPayingAttendees) * 100))}%)
+                  </span>
+                </div>
+                <div className="w-full sm:w-48 h-2 bg-slate-200 dark:bg-slate-700 rounded-full overflow-hidden">
+                  <div
+                    className="h-full bg-emerald-500 rounded-full"
+                    style={{
+                      width: `${Math.min(100, Math.round(((event.actualPayingParticipants ?? event.totalPayingParticipants) / event.estimatedPayingAttendees) * 100))}%`,
+                    }}
+                  />
+                </div>
+              </div>
+            )}
 
             {event.families.length === 0 ? (
               <div className="p-8 text-center bg-white dark:bg-[#0f172a] rounded-2xl border border-slate-200 dark:border-slate-800">
@@ -839,15 +966,24 @@ export default function EventDetailPage({
                   Nenhuma família confirmada ainda
                 </h4>
                 <p className="text-xs text-slate-500 dark:text-slate-400 mt-1 mb-4">
-                  Envie o link de convite no WhatsApp da família ou adicione manualmente.
+                  Envie o link de convite no WhatsApp da família ou cole sua lista de participantes.
                 </p>
-                <button
-                  onClick={handleCopyInvite}
-                  className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-emerald-600 text-white text-xs font-semibold"
-                >
-                  <Share2 className="w-4 h-4" />
-                  Copiar Link de Convite
-                </button>
+                <div className="flex flex-wrap items-center justify-center gap-2.5">
+                  <button
+                    onClick={handleCopyInvite}
+                    className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold shadow-sm transition-all"
+                  >
+                    <Share2 className="w-4 h-4" />
+                    Copiar Link de Convite
+                  </button>
+                  <button
+                    onClick={() => setShowImportModal(true)}
+                    className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-800 dark:text-slate-200 text-xs font-semibold transition-all border border-slate-200 dark:border-slate-700"
+                  >
+                    <FileText className="w-4 h-4" />
+                    Colar Lista do WhatsApp
+                  </button>
+                </div>
               </div>
             ) : (
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -1271,6 +1407,17 @@ export default function EventDetailPage({
                 </button>
               )}
             </div>
+
+            {bbqData?.demographics?.isEstimated && (
+              <div className="p-4 rounded-2xl bg-amber-50 dark:bg-amber-950/30 border border-amber-200/80 dark:border-amber-800/60 flex items-center gap-3 text-xs text-amber-800 dark:text-amber-300">
+                <Zap className="w-5 h-5 shrink-0 text-amber-600 dark:text-amber-400" />
+                <span>
+                  <strong>Estimativa Provisória:</strong> Esta lista foi calculada para a sua previsão de{" "}
+                  <strong>{bbqData.demographics.totalPeople} pessoas</strong> ({bbqData.demographics.menCount} homens,{" "}
+                  {bbqData.demographics.womenCount} mulheres e {bbqData.demographics.childrenCount} crianças). Conforme as famílias forem adicionadas, os cortes de carne e bebidas se ajustarão à demografia real.
+                </span>
+              </div>
+            )}
 
             {bbqData && (
               <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
@@ -2567,6 +2714,97 @@ export default function EventDetailPage({
                   Concluir
                 </button>
               </div>
+            </div>
+          </div>
+        )}
+
+        {/* ========================================================
+            MODAL: IMPORTAR LISTA DO WHATSAPP
+            ======================================================== */}
+        {showImportModal && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-black/60 backdrop-blur-sm overflow-y-auto">
+            <div className="bg-white dark:bg-[#0f172a] rounded-3xl border border-slate-200 dark:border-slate-800 p-5 sm:p-6 max-w-lg w-full shadow-2xl my-auto max-h-[90vh] overflow-y-auto">
+              <div className="flex items-center justify-between mb-3">
+                <div className="flex items-center gap-2">
+                  <div className="p-2 rounded-xl bg-emerald-50 dark:bg-emerald-950/60 text-emerald-600 dark:text-emerald-400">
+                    <FileText className="w-5 h-5" />
+                  </div>
+                  <div>
+                    <h3 className="text-base sm:text-lg font-bold text-slate-900 dark:text-white">
+                      Colar Lista do WhatsApp
+                    </h3>
+                    <span className="text-[11px] text-slate-500 dark:text-slate-400">
+                      Importação ágil em lote
+                    </span>
+                  </div>
+                </div>
+                <button
+                  onClick={() => {
+                    setShowImportModal(false);
+                    setImportFeedback(null);
+                  }}
+                  className="p-2 text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+
+              <p className="text-xs text-slate-600 dark:text-slate-400 mb-3 leading-relaxed">
+                Cole abaixo o texto ou lista de nomes compartilhada no WhatsApp. O sistema reconhece numerações, casais e especificações de adultos e crianças:
+              </p>
+
+              <div className="mb-3 p-3 rounded-xl bg-slate-50 dark:bg-slate-900/60 border border-slate-200/80 dark:border-slate-800 text-[11px] text-slate-500 dark:text-slate-400 space-y-1">
+                <span className="font-bold text-slate-700 dark:text-slate-300 block">Exemplos aceitos:</span>
+                <div>• 1. Família Curti (2 adultos, 1 criança)</div>
+                <div>• 2. Carlos e Mariana</div>
+                <div>• 3. Tio Roberto</div>
+              </div>
+
+              {importFeedback && (
+                <div
+                  className={`mb-3 p-3 rounded-xl flex items-center gap-2.5 text-xs ${
+                    importFeedback.type === "success"
+                      ? "bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800"
+                      : "bg-rose-50 dark:bg-rose-950/40 text-rose-700 dark:text-rose-300 border border-rose-200 dark:border-rose-900"
+                  }`}
+                >
+                  <AlertCircle className="w-4 h-4 shrink-0" />
+                  <span>{importFeedback.text}</span>
+                </div>
+              )}
+
+              <form onSubmit={handleImportWhatsAppList} className="space-y-4">
+                <div>
+                  <textarea
+                    rows={6}
+                    required
+                    value={importText}
+                    onChange={(e) => setImportText(e.target.value)}
+                    placeholder="Cole aqui a lista...&#10;1. João Silva (2 adultos, 1 criança)&#10;2. Carlos e Ana&#10;3. Pedro"
+                    className="w-full p-3.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-xs font-mono text-slate-900 dark:text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                  />
+                </div>
+
+                <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-100 dark:border-slate-800">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setShowImportModal(false);
+                      setImportFeedback(null);
+                    }}
+                    className="px-4 py-2.5 rounded-xl text-xs font-semibold text-slate-500 hover:text-slate-800 dark:hover:text-slate-200"
+                  >
+                    Cancelar
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={importLoading || !importText.trim()}
+                    className="px-4 py-2.5 rounded-xl text-xs font-semibold bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white shadow-sm transition-all flex items-center gap-1.5"
+                  >
+                    {importLoading ? "Processando..." : "Importar Participantes"}
+                  </button>
+                </div>
+              </form>
             </div>
           </div>
         )}

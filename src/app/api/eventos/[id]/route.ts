@@ -14,6 +14,9 @@ const updateEventSchema = z.object({
   pixReceiverName: z.string().optional(),
   minPayingAge: z.coerce.number().min(0).optional(),
   enableBbq: z.boolean().optional(),
+  creationMode: z.enum(["QUICK", "DETAILED"]).optional(),
+  estimatedAttendees: z.coerce.number().min(1).optional().nullable(),
+  estimatedPayingAttendees: z.coerce.number().min(0).optional().nullable(),
 });
 
 export async function GET(
@@ -61,22 +64,37 @@ export async function GET(
   // Fórmulas de Rateio
   const totalCosts = event.costs.reduce((sum, cost) => sum + cost.amount, 0);
 
-  // Participantes pagantes globais (idade >= minPayingAge)
-  let totalPayingParticipants = 0;
-  let totalExemptParticipants = 0;
+  // Participantes pagantes reais (idade >= minPayingAge)
+  let actualPayingParticipants = 0;
+  let actualExemptParticipants = 0;
 
   event.families.forEach((family) => {
     family.members.forEach((member) => {
       if (member.age >= event.minPayingAge) {
-        totalPayingParticipants += 1;
+        actualPayingParticipants += 1;
       } else {
-        totalExemptParticipants += 1;
+        actualExemptParticipants += 1;
       }
     });
   });
 
+  const isEstimatedRateio =
+    actualPayingParticipants === 0 && Boolean(event.estimatedPayingAttendees && event.estimatedPayingAttendees > 0);
+
+  const effectivePayingParticipants = isEstimatedRateio
+    ? (event.estimatedPayingAttendees || 0)
+    : actualPayingParticipants;
+
+  const effectiveTotalParticipants = isEstimatedRateio
+    ? (event.estimatedAttendees || event.estimatedPayingAttendees || 0)
+    : (actualPayingParticipants + actualExemptParticipants);
+
+  const effectiveExemptParticipants = isEstimatedRateio
+    ? Math.max(0, effectiveTotalParticipants - effectivePayingParticipants)
+    : actualExemptParticipants;
+
   const costPerQuota =
-    totalPayingParticipants > 0 ? totalCosts / totalPayingParticipants : 0;
+    effectivePayingParticipants > 0 ? totalCosts / effectivePayingParticipants : 0;
 
   // Resumo por família
   const familiesSummary = event.families.map((family) => {
@@ -130,8 +148,13 @@ export async function GET(
       isOwner,
       canEdit,
       totalCosts,
-      totalPayingParticipants,
-      totalExemptParticipants,
+      totalPayingParticipants: effectivePayingParticipants,
+      totalExemptParticipants: effectiveExemptParticipants,
+      totalParticipants: effectiveTotalParticipants,
+      actualPayingParticipants,
+      actualExemptParticipants,
+      actualTotalParticipants: actualPayingParticipants + actualExemptParticipants,
+      isEstimatedRateio,
       costPerQuota: Number(costPerQuota.toFixed(2)),
       totalPaidAmount: Number(totalPaidAmount.toFixed(2)),
       totalPendingAmount: Number(totalPendingAmount.toFixed(2)),

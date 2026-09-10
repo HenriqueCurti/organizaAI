@@ -51,23 +51,39 @@ export async function GET(
     });
   }
 
-  // Contagem demográfica
-  let menCount = 0;
-  let womenCount = 0;
-  let childrenCount = 0;
+  // Contagem demográfica real
+  let actualMenCount = 0;
+  let actualWomenCount = 0;
+  let actualChildrenCount = 0;
 
   event.families.forEach((f) => {
     f.members.forEach((m) => {
       if (m.age < 12) {
-        childrenCount++;
+        actualChildrenCount++;
       } else if (m.gender === "FEMALE") {
-        womenCount++;
+        actualWomenCount++;
       } else {
         // MALE e OTHER contam como homens para margem segura de carne
-        menCount++;
+        actualMenCount++;
       }
     });
   });
+
+  const actualPeople = actualMenCount + actualWomenCount + actualChildrenCount;
+  const isEstimated = actualPeople === 0 && Boolean(event.estimatedAttendees && event.estimatedAttendees > 0);
+
+  let menCount = actualMenCount;
+  let womenCount = actualWomenCount;
+  let childrenCount = actualChildrenCount;
+
+  if (isEstimated && event.estimatedAttendees) {
+    const totalEst = event.estimatedAttendees;
+    const payingEst = event.estimatedPayingAttendees ?? event.estimatedAttendees;
+    childrenCount = Math.max(0, totalEst - payingEst);
+    const adultsEst = totalEst - childrenCount;
+    menCount = Math.ceil(adultsEst / 2);
+    womenCount = Math.floor(adultsEst / 2);
+  }
 
   const totalPeople = menCount + womenCount + childrenCount;
   const days = bbq.daysCount || 1;
@@ -134,6 +150,7 @@ _Gerado automaticamente pelo OrganizaAI_ 🚀`;
         childrenCount,
         totalPeople,
         days,
+        isEstimated,
       },
       meat: {
         totalKg: totalMeatKg,
