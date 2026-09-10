@@ -198,7 +198,7 @@ function EventCard({
   return (
     <Link
       href={`/eventos/${event.id}`}
-      className="group block bg-white dark:bg-[#0f172a] rounded-2xl border border-slate-200 dark:border-slate-800 p-6 shadow-sm hover:shadow-md hover:border-emerald-500/50 dark:hover:border-emerald-500/50 transition-all flex flex-col justify-between"
+      className="group block bg-white dark:bg-[#0f172a] rounded-2xl border border-slate-200 dark:border-slate-800 p-5 sm:p-6 shadow-sm hover:shadow-md hover:border-emerald-500/50 dark:hover:border-emerald-500/50 transition-all flex flex-col justify-between"
     >
       <div>
         <div className="flex items-start justify-between gap-2 mb-3">
@@ -265,7 +265,7 @@ function EventCard({
           <button
             onClick={(e) => onCopyInvite(event.inviteCode, e)}
             title="Copiar link de convite para WhatsApp"
-            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-slate-100 hover:bg-emerald-50 hover:text-emerald-700 dark:bg-slate-800 dark:hover:bg-emerald-950/60 dark:hover:text-emerald-300 text-slate-700 dark:text-slate-300 transition-colors"
+            className="inline-flex items-center gap-1.5 px-3 py-2 sm:py-1.5 rounded-lg text-xs font-medium bg-slate-100 hover:bg-emerald-50 hover:text-emerald-700 dark:bg-slate-800 dark:hover:bg-emerald-950/60 dark:hover:text-emerald-300 text-slate-700 dark:text-slate-300 transition-colors"
           >
             {copiedCode === event.inviteCode ? (
               <>

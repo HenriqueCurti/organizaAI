@@ -59,49 +59,51 @@ export function Navbar() {
           {!loading && (
             <>
               {user ? (
-                <div className="flex items-center gap-3">
+                <div className="flex items-center gap-1.5 sm:gap-3">
                   <Link
                     href="/dashboard"
-                    className="hidden sm:flex items-center gap-1.5 px-3.5 py-1.5 text-sm font-medium text-slate-700 dark:text-slate-300 hover:text-emerald-600 dark:hover:text-emerald-400 transition-colors"
+                    title="Meus Eventos"
+                    className="flex items-center gap-1.5 p-2 sm:px-3.5 sm:py-2 text-sm font-medium rounded-xl text-slate-700 dark:text-slate-300 hover:text-emerald-600 dark:hover:text-emerald-400 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
                   >
-                    <CalendarCheck className="w-4 h-4" />
-                    Meus Eventos
+                    <CalendarCheck className="w-5 h-5 sm:w-4 sm:h-4" />
+                    <span className="hidden sm:inline">Meus Eventos</span>
                   </Link>
 
                   <Link
                     href="/eventos/novo"
-                    className="flex items-center gap-1.5 px-3.5 py-1.5 text-sm font-medium rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white shadow-sm transition-all hover:shadow"
+                    title="Criar Novo Evento"
+                    className="flex items-center gap-1.5 p-2 sm:px-3.5 sm:py-2 text-sm font-medium rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white shadow-sm transition-all"
                   >
-                    <PlusCircle className="w-4 h-4" />
+                    <PlusCircle className="w-5 h-5 sm:w-4 sm:h-4" />
                     <span className="hidden sm:inline">Criar Evento</span>
                   </Link>
 
-                  <div className="flex items-center gap-2 pl-2 border-l border-slate-200 dark:border-slate-800">
-                    <div className="w-8 h-8 rounded-full bg-slate-100 dark:bg-slate-800 flex items-center justify-center text-slate-600 dark:text-slate-300 font-semibold text-xs border border-slate-200 dark:border-slate-700">
+                  <div className="flex items-center gap-1.5 sm:gap-2 pl-1.5 sm:pl-2 border-l border-slate-200 dark:border-slate-800">
+                    <div className="w-8 h-8 rounded-full bg-slate-100 dark:bg-slate-800 flex items-center justify-center text-slate-700 dark:text-slate-300 font-bold text-xs border border-slate-200 dark:border-slate-700 shrink-0">
                       {user.name.charAt(0).toUpperCase()}
                     </div>
                     <button
                       onClick={handleLogout}
                       title="Sair da conta"
-                      className="p-1.5 text-slate-400 hover:text-rose-500 rounded-lg transition-colors"
+                      className="p-2 text-slate-400 hover:text-rose-500 rounded-xl hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
                     >
                       <LogOut className="w-4 h-4" />
                     </button>
                   </div>
                 </div>
               ) : (
-                <div className="flex items-center gap-2">
+                <div className="flex items-center gap-1.5 sm:gap-2">
                   <Link
                     href="/login"
-                    className="px-3.5 py-1.5 text-sm font-medium text-slate-700 dark:text-slate-300 hover:text-emerald-600 dark:hover:text-emerald-400 transition-colors"
+                    className="px-2.5 sm:px-3.5 py-2 text-xs sm:text-sm font-semibold text-slate-700 dark:text-slate-300 hover:text-emerald-600 dark:hover:text-emerald-400 transition-colors"
                   >
                     Entrar
                   </Link>
                   <Link
                     href="/cadastro"
-                    className="px-4 py-1.5 text-sm font-medium rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white shadow-sm transition-all"
+                    className="px-3 sm:px-4 py-2 text-xs sm:text-sm font-semibold rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white shadow-sm transition-all text-center"
                   >
-                    Começar Grátis
+                    Começar
                   </Link>
                 </div>
               )}

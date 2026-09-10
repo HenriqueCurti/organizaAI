@@ -96,6 +96,7 @@ export async function GET(
       pixKey: event.pixKey,
       pixKeyType: event.pixKeyType,
       pixReceiverName: event.pixReceiverName,
+      organizerPhone: event.pixKeyType === "PHONE" ? event.pixKey : null,
     },
   });
 }

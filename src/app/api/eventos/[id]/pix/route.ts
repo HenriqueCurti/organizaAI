@@ -9,13 +9,14 @@ export async function GET(
   const { id: eventId } = await params;
   const { searchParams } = new URL(req.url);
   const familyId = searchParams.get("familyId");
+  const customAmountParam = searchParams.get("amount");
 
   const event = await prisma.event.findUnique({
     where: { id: eventId },
     include: {
       costs: true,
       families: {
-        include: { members: true },
+        include: { members: true, payments: true },
       },
     },
   });
@@ -43,13 +44,37 @@ export async function GET(
   const costPerQuota = totalPayingParticipants > 0 ? totalCosts / totalPayingParticipants : 0;
 
   let amountToPay = costPerQuota;
+  let familyTotalCost = costPerQuota;
+  let familyTotalPaid = 0;
+  let pendingAmount = costPerQuota;
+  let isFullyPaid = false;
 
   if (familyId) {
     const family = event.families.find((f) => f.id === familyId);
     if (family) {
       const payingCount = family.members.filter((m) => m.age >= event.minPayingAge).length;
-      amountToPay = payingCount * costPerQuota;
+      familyTotalCost = Number((payingCount * costPerQuota).toFixed(2));
+      const paymentsSum = family.payments.reduce((sum, p) => sum + p.amount, 0);
+      familyTotalPaid = Number(
+        (family.payments.length > 0
+          ? paymentsSum
+          : family.paymentStatus === "PAID"
+          ? familyTotalCost
+          : 0
+        ).toFixed(2)
+      );
+      pendingAmount = Number(Math.max(0, familyTotalCost - familyTotalPaid).toFixed(2));
+      isFullyPaid = familyTotalPaid >= familyTotalCost && familyTotalCost > 0;
+
+      if (customAmountParam && !isNaN(parseFloat(customAmountParam))) {
+        amountToPay = Math.max(0, parseFloat(customAmountParam));
+      } else {
+        // Por padrão, gera com o saldo pendente (saldo devedor)
+        amountToPay = pendingAmount;
+      }
     }
+  } else if (customAmountParam && !isNaN(parseFloat(customAmountParam))) {
+    amountToPay = Math.max(0, parseFloat(customAmountParam));
   }
 
   const roundedAmount = Number(amountToPay.toFixed(2));
@@ -69,6 +94,10 @@ export async function GET(
       key: event.pixKey,
       receiverName: event.pixReceiverName || "ORGANIZADOR",
       amount: roundedAmount,
+      totalCost: Number(familyTotalCost.toFixed(2)),
+      totalPaid: Number(familyTotalPaid.toFixed(2)),
+      pendingAmount: Number(pendingAmount.toFixed(2)),
+      isFullyPaid,
       payload,
       qrCode,
     },

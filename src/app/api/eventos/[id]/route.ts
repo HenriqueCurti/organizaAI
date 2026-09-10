@@ -40,6 +40,9 @@ export async function GET(
           members: {
             orderBy: { age: "desc" },
           },
+          payments: {
+            orderBy: { paidAt: "desc" },
+          },
         },
         orderBy: { createdAt: "asc" },
       },
@@ -79,21 +82,47 @@ export async function GET(
   const familiesSummary = event.families.map((family) => {
     const payingCount = family.members.filter((m) => m.age >= event.minPayingAge).length;
     const exemptCount = family.members.length - payingCount;
-    const familyTotalCost = payingCount * costPerQuota;
+    const familyTotalCost = Number((payingCount * costPerQuota).toFixed(2));
+
+    const paymentsSum = family.payments.reduce((sum, p) => sum + p.amount, 0);
+    const familyTotalPaid = Number(
+      (family.payments.length > 0
+        ? paymentsSum
+        : family.paymentStatus === "PAID"
+        ? familyTotalCost
+        : 0
+      ).toFixed(2)
+    );
+    const familyPendingAmount = Number(
+      Math.max(0, familyTotalCost - familyTotalPaid).toFixed(2)
+    );
+
+    let status = family.paymentStatus;
+    if (familyTotalPaid >= familyTotalCost && familyTotalCost > 0) {
+      status = "PAID";
+    } else if (familyTotalPaid > 0) {
+      status = "PARTIAL";
+    } else {
+      status = "PENDING";
+    }
 
     return {
       ...family,
+      paymentStatus: status,
       payingCount,
       exemptCount,
-      familyTotalCost: Number(familyTotalCost.toFixed(2)),
+      familyTotalCost,
+      familyTotalPaid,
+      familyPendingAmount,
     };
   });
 
-  const totalPaidAmount = familiesSummary
-    .filter((f) => f.paymentStatus === "PAID")
-    .reduce((sum, f) => sum + f.familyTotalCost, 0);
+  const totalPaidAmount = familiesSummary.reduce(
+    (sum, f) => sum + f.familyTotalPaid,
+    0
+  );
 
-  const totalPendingAmount = totalCosts - totalPaidAmount;
+  const totalPendingAmount = Math.max(0, totalCosts - totalPaidAmount);
 
   return NextResponse.json({
     event: {

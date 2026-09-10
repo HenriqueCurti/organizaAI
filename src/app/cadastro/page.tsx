@@ -47,7 +47,7 @@ export default function RegisterPage() {
       <Navbar />
 
       <main className="flex-1 flex items-center justify-center p-4 sm:p-6">
-        <div className="w-full max-w-md bg-white dark:bg-[#0f172a] rounded-2xl border border-slate-200 dark:border-slate-800 p-8 shadow-xl shadow-slate-200/50 dark:shadow-none">
+        <div className="w-full max-w-md bg-white dark:bg-[#0f172a] rounded-2xl border border-slate-200 dark:border-slate-800 p-6 sm:p-8 shadow-xl shadow-slate-200/50 dark:shadow-none">
           <div className="text-center mb-8">
             <h1 className="text-2xl font-bold text-slate-900 dark:text-white">
               Crie sua conta

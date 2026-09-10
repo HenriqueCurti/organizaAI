@@ -87,6 +87,7 @@ model Family {
   receiptNote      String?       // Observação ou link do comprovante
   event            Event         @relation(fields: [eventId], references: [id], onDelete: Cascade)
   members          Participant[]
+  payments         Payment[]
   createdAt        DateTime      @default(now())
   updatedAt        DateTime      @updatedAt
 }
@@ -100,6 +101,18 @@ model Participant {
   isPaying    Boolean   @default(true)
   family      Family    @relation(fields: [familyId], references: [id], onDelete: Cascade)
   createdAt   DateTime  @default(now())
+}
+
+model Payment {
+  id         String   @id @default(cuid())
+  familyId   String
+  family     Family   @relation(fields: [familyId], references: [id], onDelete: Cascade)
+  amount     Float
+  paidAt     DateTime @default(now())
+  method     String   @default("PIX") // PIX, DINHEIRO, TRANSFERENCIA, OUTRO
+  note       String?  // Observação, link ou dados do comprovante
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
 }
 
 model BbqConfig {

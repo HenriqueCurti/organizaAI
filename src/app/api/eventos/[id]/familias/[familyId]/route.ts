@@ -8,7 +8,7 @@ const updateFamilySchema = z.object({
   responsibleName: z.string().min(2).optional(),
   responsiblePhone: z.string().optional().nullable(),
   responsibleEmail: z.string().email().optional().nullable().or(z.literal("")),
-  paymentStatus: z.enum(["PENDING", "PAID"]).optional(),
+  paymentStatus: z.enum(["PENDING", "PARTIAL", "PAID"]).optional(),
   receiptNote: z.string().optional().nullable(),
   members: z
     .array(
@@ -91,7 +91,7 @@ export async function PUT(
 
     const fullFamily = await prisma.family.findUnique({
       where: { id: familyId },
-      include: { members: true },
+      include: { members: true, payments: { orderBy: { paidAt: "desc" } } },
     });
 
     return NextResponse.json({ family: fullFamily });

@@ -73,7 +73,7 @@ export default function NewEventPage() {
           Voltar para o Painel
         </Link>
 
-        <div className="bg-white dark:bg-[#0f172a] rounded-3xl border border-slate-200 dark:border-slate-800 p-6 sm:p-10 shadow-sm">
+        <div className="bg-white dark:bg-[#0f172a] rounded-3xl border border-slate-200 dark:border-slate-800 p-5 sm:p-10 shadow-sm">
           <div className="mb-8">
             <h1 className="text-2xl font-bold text-slate-900 dark:text-white">
               Criar Novo Evento

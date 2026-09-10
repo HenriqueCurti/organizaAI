@@ -26,6 +26,8 @@ import {
   UserCheck,
   X,
   AlertCircle,
+  Send,
+  History,
 } from "lucide-react";
 
 interface Member {
@@ -36,17 +38,29 @@ interface Member {
   isPaying: boolean;
 }
 
+interface PaymentRecord {
+  id: string;
+  familyId: string;
+  amount: number;
+  paidAt: string;
+  method: string;
+  note: string | null;
+}
+
 interface Family {
   id: string;
   familyName: string;
   responsibleName: string;
   responsibleEmail: string | null;
   responsiblePhone: string | null;
-  paymentStatus: "PENDING" | "PAID";
+  paymentStatus: "PENDING" | "PARTIAL" | "PAID";
   payingCount: number;
   exemptCount: number;
   familyTotalCost: number;
+  familyTotalPaid: number;
+  familyPendingAmount: number;
   members: Member[];
+  payments: PaymentRecord[];
 }
 
 interface Cost {
@@ -129,11 +143,29 @@ export default function EventDetailPage({
 
   // Modal Pix Específico de Família
   const [pixModalData, setPixModalData] = useState<{
+    familyId: string;
     familyName: string;
+    responsiblePhone: string | null;
+    responsibleName: string;
     amount: number;
+    totalCost: number;
+    totalPaid: number;
+    pendingAmount: number;
+    isFullyPaid: boolean;
     payload: string;
     qrCode: string;
   } | null>(null);
+  const [customPixAmount, setCustomPixAmount] = useState<string>("");
+  const [loadingPixAmount, setLoadingPixAmount] = useState(false);
+
+  // Modal de Registro e Histórico de Pagamentos
+  const [paymentModalFamily, setPaymentModalFamily] = useState<Family | null>(null);
+  const [paymentAmount, setPaymentAmount] = useState<string>("");
+  const [paymentMethod, setPaymentMethod] = useState<string>("PIX");
+  const [paymentDate, setPaymentDate] = useState<string>("");
+  const [paymentNote, setPaymentNote] = useState<string>("");
+  const [paymentSubmitting, setPaymentSubmitting] = useState(false);
+  const [copiedFamilyPix, setCopiedFamilyPix] = useState(false);
 
   // Dados do Churrascômetro
   const [bbqData, setBbqData] = useState<any>(null);
@@ -249,17 +281,81 @@ export default function EventDetailPage({
   };
 
   // --- FAMÍLIAS & MEMBROS ---
-  const handleTogglePaymentStatus = async (family: Family) => {
-    const newStatus = family.paymentStatus === "PAID" ? "PENDING" : "PAID";
+  const handleOpenPaymentModal = (family: Family) => {
+    setPaymentModalFamily(family);
+    setPaymentAmount(family.familyPendingAmount > 0 ? String(family.familyPendingAmount) : "");
+    setPaymentDate(new Date().toISOString().slice(0, 10));
+    setPaymentMethod("PIX");
+    setPaymentNote("");
+  };
+
+  const handleSavePayment = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!paymentModalFamily || !paymentAmount || parseFloat(paymentAmount) <= 0) return;
+
+    setPaymentSubmitting(true);
     try {
-      await fetch(`/api/eventos/${id}/familias/${family.id}`, {
-        method: "PUT",
+      const res = await fetch(`/api/eventos/${id}/familias/${paymentModalFamily.id}/pagamentos`, {
+        method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ paymentStatus: newStatus }),
+        body: JSON.stringify({
+          amount: parseFloat(paymentAmount),
+          method: paymentMethod,
+          paidAt: paymentDate ? new Date(paymentDate).toISOString() : new Date().toISOString(),
+          note: paymentNote || null,
+        }),
       });
-      fetchEvent();
+
+      if (res.ok) {
+        await fetchEvent();
+        const updatedRes = await fetch(`/api/eventos/${id}`);
+        const updatedData = await updatedRes.json();
+        if (updatedData.event) {
+          const updatedFamily = updatedData.event.families.find((f: Family) => f.id === paymentModalFamily.id);
+          if (updatedFamily) {
+            setPaymentModalFamily(updatedFamily);
+            setPaymentAmount(updatedFamily.familyPendingAmount > 0 ? String(updatedFamily.familyPendingAmount) : "");
+          }
+        }
+        setPaymentNote("");
+      } else {
+        const err = await res.json();
+        alert(err.error || "Erro ao registrar pagamento");
+      }
     } catch (e) {
       console.error(e);
+      alert("Falha ao registrar pagamento");
+    } finally {
+      setPaymentSubmitting(false);
+    }
+  };
+
+  const handleDeletePaymentRecord = async (paymentId: string) => {
+    if (!paymentModalFamily) return;
+    if (!confirm("Tem certeza que deseja estornar este lançamento de pagamento?")) return;
+
+    try {
+      const res = await fetch(`/api/eventos/${id}/familias/${paymentModalFamily.id}/pagamentos/${paymentId}`, {
+        method: "DELETE",
+      });
+      if (res.ok) {
+        await fetchEvent();
+        const updatedRes = await fetch(`/api/eventos/${id}`);
+        const updatedData = await updatedRes.json();
+        if (updatedData.event) {
+          const updatedFamily = updatedData.event.families.find((f: Family) => f.id === paymentModalFamily.id);
+          if (updatedFamily) {
+            setPaymentModalFamily(updatedFamily);
+            setPaymentAmount(updatedFamily.familyPendingAmount > 0 ? String(updatedFamily.familyPendingAmount) : "");
+          }
+        }
+      } else {
+        const err = await res.json();
+        alert(err.error || "Erro ao estornar pagamento");
+      }
+    } catch (e) {
+      console.error(e);
+      alert("Falha ao estornar pagamento");
     }
   };
 
@@ -274,20 +370,57 @@ export default function EventDetailPage({
     }
   };
 
-  const handleOpenFamilyPix = async (family: Family) => {
+  const handleOpenFamilyPix = async (family: Family, customAmount?: number) => {
     try {
-      const res = await fetch(`/api/eventos/${id}/pix?familyId=${family.id}`);
+      setLoadingPixAmount(true);
+      const url = customAmount !== undefined
+        ? `/api/eventos/${id}/pix?familyId=${family.id}&amount=${customAmount}`
+        : `/api/eventos/${id}/pix?familyId=${family.id}`;
+      const res = await fetch(url);
       const data = await res.json();
       if (res.ok) {
         setPixModalData({
+          familyId: family.id,
           familyName: family.familyName,
+          responsiblePhone: family.responsiblePhone,
+          responsibleName: family.responsibleName,
           amount: data.pix.amount,
+          totalCost: data.pix.totalCost,
+          totalPaid: data.pix.totalPaid,
+          pendingAmount: data.pix.pendingAmount,
+          isFullyPaid: data.pix.isFullyPaid,
           payload: data.pix.payload,
           qrCode: data.pix.qrCode,
         });
+        setCustomPixAmount(String(data.pix.amount));
+      } else {
+        alert(data.error || "Erro ao gerar Pix");
       }
     } catch (e) {
       console.error(e);
+    } finally {
+      setLoadingPixAmount(false);
+    }
+  };
+
+  const handleRecalculatePixWithAmount = async (amount: number) => {
+    if (!pixModalData) return;
+    try {
+      setLoadingPixAmount(true);
+      const res = await fetch(`/api/eventos/${id}/pix?familyId=${pixModalData.familyId}&amount=${amount}`);
+      const data = await res.json();
+      if (res.ok) {
+        setPixModalData((prev) => prev ? {
+          ...prev,
+          amount: data.pix.amount,
+          payload: data.pix.payload,
+          qrCode: data.pix.qrCode,
+        } : null);
+      }
+    } catch (e) {
+      console.error(e);
+    } finally {
+      setLoadingPixAmount(false);
     }
   };
 
@@ -465,10 +598,10 @@ export default function EventDetailPage({
 
       <main className="flex-1 max-w-7xl mx-auto w-full px-4 sm:px-6 lg:px-8 py-8 space-y-8">
         {/* Top Breadcrumb & Share Link */}
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 sm:gap-4">
           <Link
             href="/dashboard"
-            className="inline-flex items-center gap-1.5 text-xs font-semibold text-slate-500 hover:text-slate-900 dark:hover:text-white transition-colors"
+            className="inline-flex items-center gap-1.5 text-xs font-semibold text-slate-500 hover:text-slate-900 dark:hover:text-white transition-colors py-1"
           >
             <ArrowLeft className="w-4 h-4" />
             Voltar para Meus Eventos
@@ -476,7 +609,7 @@ export default function EventDetailPage({
 
           <button
             onClick={handleCopyInvite}
-            className="inline-flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-semibold bg-emerald-600 hover:bg-emerald-700 text-white shadow-md shadow-emerald-600/20 transition-all self-start sm:self-auto"
+            className="inline-flex items-center justify-center gap-2 px-4 py-2.5 sm:py-2 rounded-xl text-xs font-semibold bg-emerald-600 hover:bg-emerald-700 text-white shadow-md shadow-emerald-600/20 transition-all w-full sm:w-auto"
           >
             {copiedLink ? (
               <>
@@ -493,10 +626,10 @@ export default function EventDetailPage({
         </div>
 
         {/* Hero Card do Evento */}
-        <div className="bg-white dark:bg-[#0f172a] rounded-3xl border border-slate-200 dark:border-slate-800 p-6 sm:p-8 shadow-sm">
+        <div className="bg-white dark:bg-[#0f172a] rounded-3xl border border-slate-200 dark:border-slate-800 p-5 sm:p-8 shadow-sm">
           <div className="flex flex-col md:flex-row md:items-start justify-between gap-6">
-            <div className="space-y-2">
-              <div className="flex items-center gap-2">
+            <div className="space-y-2.5">
+              <div className="flex flex-wrap items-center gap-2">
                 <span className="px-2.5 py-0.5 rounded-full text-xs font-bold bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300">
                   Idade de corte: {event.minPayingAge}+ anos pagam
                 </span>
@@ -516,14 +649,14 @@ export default function EventDetailPage({
               </h1>
 
               {event.description && (
-                <p className="text-sm text-slate-500 dark:text-slate-400 max-w-2xl">
+                <p className="text-xs sm:text-sm text-slate-500 dark:text-slate-400 max-w-2xl leading-relaxed">
                   {event.description}
                 </p>
               )}
 
-              <div className="flex flex-wrap items-center gap-4 text-xs text-slate-600 dark:text-slate-400 pt-1">
+              <div className="flex flex-wrap items-center gap-3 sm:gap-4 text-xs text-slate-600 dark:text-slate-400 pt-1">
                 <div className="flex items-center gap-1.5">
-                  <Calendar className="w-4 h-4 text-slate-400" />
+                  <Calendar className="w-4 h-4 text-slate-400 shrink-0" />
                   <span>
                     {new Date(event.startDate).toLocaleDateString("pt-BR")} até{" "}
                     {new Date(event.endDate).toLocaleDateString("pt-BR")}
@@ -532,7 +665,7 @@ export default function EventDetailPage({
 
                 {event.locationName && (
                   <div className="flex items-center gap-1.5">
-                    <MapPin className="w-4 h-4 text-slate-400" />
+                    <MapPin className="w-4 h-4 text-slate-400 shrink-0" />
                     <span>{event.locationName}</span>
                   </div>
                 )}
@@ -540,7 +673,7 @@ export default function EventDetailPage({
             </div>
 
             {/* Banner de Arrecadação Pix */}
-            <div className="min-w-[260px] p-4 rounded-2xl bg-slate-50 dark:bg-slate-900/80 border border-slate-200 dark:border-slate-800 space-y-3">
+            <div className="w-full md:w-auto md:min-w-[280px] p-4 rounded-2xl bg-slate-50 dark:bg-slate-900/80 border border-slate-200 dark:border-slate-800 space-y-3">
               <div className="flex items-center justify-between text-xs">
                 <span className="text-slate-500 font-medium">Progresso dos Pagamentos</span>
                 <span className="font-bold text-emerald-600 dark:text-emerald-400">{percentCollected}%</span>
@@ -559,60 +692,60 @@ export default function EventDetailPage({
           </div>
 
           {/* Cards Rápidos de Resumo Financeiro */}
-          <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mt-8 pt-6 border-t border-slate-100 dark:border-slate-800/80">
-            <div className="p-4 rounded-2xl bg-slate-50 dark:bg-slate-900/50">
-              <span className="text-xs text-slate-500 dark:text-slate-400 block font-medium">
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4 mt-6 sm:mt-8 pt-6 border-t border-slate-100 dark:border-slate-800/80">
+            <div className="p-3 sm:p-4 rounded-2xl bg-slate-50 dark:bg-slate-900/50">
+              <span className="text-[11px] sm:text-xs text-slate-500 dark:text-slate-400 block font-medium">
                 Custo Total das Despesas
               </span>
-              <span className="text-xl font-bold text-slate-900 dark:text-white mt-1 block">
+              <span className="text-base sm:text-xl font-bold text-slate-900 dark:text-white mt-1 block">
                 R$ {event.totalCosts.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}
               </span>
-              <span className="text-[11px] text-slate-400">{event.costs.length} item(ns) cadastrados</span>
+              <span className="text-[10px] sm:text-[11px] text-slate-400">{event.costs.length} item(ns) cadastrados</span>
             </div>
 
-            <div className="p-4 rounded-2xl bg-emerald-50 dark:bg-emerald-950/30 border border-emerald-100 dark:border-emerald-900/40">
-              <span className="text-xs text-emerald-800 dark:text-emerald-400 block font-semibold">
-                Valor da Cota por Pagante
+            <div className="p-3 sm:p-4 rounded-2xl bg-emerald-50 dark:bg-emerald-950/30 border border-emerald-100 dark:border-emerald-900/40">
+              <span className="text-[11px] sm:text-xs text-emerald-800 dark:text-emerald-400 block font-semibold">
+                Cota por Pagante
               </span>
-              <span className="text-xl font-bold text-emerald-700 dark:text-emerald-300 mt-1 block">
+              <span className="text-base sm:text-xl font-bold text-emerald-700 dark:text-emerald-300 mt-1 block">
                 R$ {event.costPerQuota.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}
               </span>
-              <span className="text-[11px] text-emerald-600/80 dark:text-emerald-400/80">
-                Por pessoa com {event.minPayingAge}+ anos
+              <span className="text-[10px] sm:text-[11px] text-emerald-600/80 dark:text-emerald-400/80">
+                {event.minPayingAge}+ anos pagam
               </span>
             </div>
 
-            <div className="p-4 rounded-2xl bg-slate-50 dark:bg-slate-900/50">
-              <span className="text-xs text-slate-500 dark:text-slate-400 block font-medium">
-                Total de Participantes
+            <div className="p-3 sm:p-4 rounded-2xl bg-slate-50 dark:bg-slate-900/50">
+              <span className="text-[11px] sm:text-xs text-slate-500 dark:text-slate-400 block font-medium">
+                Total Participantes
               </span>
-              <span className="text-xl font-bold text-slate-900 dark:text-white mt-1 block">
+              <span className="text-base sm:text-xl font-bold text-slate-900 dark:text-white mt-1 block">
                 {event.totalPayingParticipants + event.totalExemptParticipants} pessoas
               </span>
-              <span className="text-[11px] text-slate-400">
+              <span className="text-[10px] sm:text-[11px] text-slate-400">
                 {event.totalPayingParticipants} pagantes | {event.totalExemptParticipants} isentos
               </span>
             </div>
 
-            <div className="p-4 rounded-2xl bg-slate-50 dark:bg-slate-900/50">
-              <span className="text-xs text-slate-500 dark:text-slate-400 block font-medium">
+            <div className="p-3 sm:p-4 rounded-2xl bg-slate-50 dark:bg-slate-900/50">
+              <span className="text-[11px] sm:text-xs text-slate-500 dark:text-slate-400 block font-medium">
                 Famílias Cadastradas
               </span>
-              <span className="text-xl font-bold text-slate-900 dark:text-white mt-1 block">
+              <span className="text-base sm:text-xl font-bold text-slate-900 dark:text-white mt-1 block">
                 {event.families.length} famílias
               </span>
-              <span className="text-[11px] text-slate-400">
-                {event.families.filter((f) => f.paymentStatus === "PAID").length} pagas
+              <span className="text-[10px] sm:text-[11px] text-slate-400">
+                {event.families.filter((f) => f.paymentStatus === "PAID").length} quitadas | {event.families.filter((f) => f.paymentStatus === "PARTIAL").length} parciais
               </span>
             </div>
           </div>
         </div>
 
         {/* Abas de Navegação */}
-        <div className="flex items-center gap-2 border-b border-slate-200 dark:border-slate-800 overflow-x-auto pb-1">
+        <div className="flex items-center gap-1.5 sm:gap-2 border-b border-slate-200 dark:border-slate-800 overflow-x-auto pb-1 no-scrollbar touch-scroll">
           <button
             onClick={() => setActiveTab("rateio")}
-            className={`flex items-center gap-2 px-4 py-2.5 text-sm font-semibold border-b-2 whitespace-nowrap transition-colors ${
+            className={`flex items-center gap-2 px-3.5 sm:px-4 py-3 sm:py-2.5 text-xs sm:text-sm font-semibold border-b-2 whitespace-nowrap shrink-0 transition-colors ${
               activeTab === "rateio"
                 ? "border-emerald-600 text-emerald-600 dark:text-emerald-400 dark:border-emerald-400"
                 : "border-transparent text-slate-500 hover:text-slate-800 dark:hover:text-slate-200"
@@ -624,7 +757,7 @@ export default function EventDetailPage({
 
           <button
             onClick={() => setActiveTab("custos")}
-            className={`flex items-center gap-2 px-4 py-2.5 text-sm font-semibold border-b-2 whitespace-nowrap transition-colors ${
+            className={`flex items-center gap-2 px-3.5 sm:px-4 py-3 sm:py-2.5 text-xs sm:text-sm font-semibold border-b-2 whitespace-nowrap shrink-0 transition-colors ${
               activeTab === "custos"
                 ? "border-emerald-600 text-emerald-600 dark:text-emerald-400 dark:border-emerald-400"
                 : "border-transparent text-slate-500 hover:text-slate-800 dark:hover:text-slate-200"
@@ -736,18 +869,25 @@ export default function EventDetailPage({
                         </div>
 
                         <button
-                          onClick={() => handleTogglePaymentStatus(family)}
-                          title="Clique para alternar status de pagamento"
+                          onClick={() => handleOpenPaymentModal(family)}
+                          title="Clique para gerenciar pagamentos desta família"
                           className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold transition-all ${
                             family.paymentStatus === "PAID"
-                              ? "bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300 hover:opacity-80"
-                              : "bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300 hover:opacity-80"
+                              ? "bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300 hover:opacity-85 shadow-sm"
+                              : family.paymentStatus === "PARTIAL"
+                              ? "bg-blue-100 text-blue-800 dark:bg-blue-950 dark:text-blue-300 hover:opacity-85 shadow-sm"
+                              : "bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300 hover:opacity-85 shadow-sm"
                           }`}
                         >
                           {family.paymentStatus === "PAID" ? (
                             <>
                               <CheckCircle2 className="w-3.5 h-3.5" />
-                              <span>Pago</span>
+                              <span>Quitada</span>
+                            </>
+                          ) : family.paymentStatus === "PARTIAL" ? (
+                            <>
+                              <Clock className="w-3.5 h-3.5" />
+                              <span>Parcial</span>
                             </>
                           ) : (
                             <>
@@ -789,49 +929,116 @@ export default function EventDetailPage({
                       </div>
                     </div>
 
-                    {/* Resumo da Cota & Botões de Ação */}
-                    <div className="pt-3 border-t border-slate-100 dark:border-slate-800/80 flex items-center justify-between">
-                      <div>
-                        <span className="text-[11px] text-slate-400 block font-medium">Total da Família:</span>
-                        <span className="text-base font-bold text-emerald-600 dark:text-emerald-400">
-                          R$ {family.familyTotalCost.toFixed(2)}
-                        </span>
-                        <span className="text-[10px] text-slate-400 block">
-                          ({family.payingCount} pagante(s) x R$ {event.costPerQuota.toFixed(2)})
-                        </span>
+                    {/* Resumo Financeiro da Família & Barra de Progresso */}
+                    <div className="pt-3 border-t border-slate-100 dark:border-slate-800/80 space-y-3">
+                      <div className="grid grid-cols-3 gap-2 text-center p-2 rounded-xl bg-slate-50 dark:bg-slate-900/60 border border-slate-100 dark:border-slate-800/60">
+                        <div>
+                          <span className="text-[10px] text-slate-400 font-medium block">Cota Total</span>
+                          <span className="text-xs font-bold text-slate-800 dark:text-slate-200">
+                            R$ {family.familyTotalCost.toFixed(2)}
+                          </span>
+                        </div>
+                        <div>
+                          <span className="text-[10px] text-slate-400 font-medium block">Total Pago</span>
+                          <span className="text-xs font-bold text-emerald-600 dark:text-emerald-400">
+                            R$ {family.familyTotalPaid.toFixed(2)}
+                          </span>
+                        </div>
+                        <div>
+                          <span className="text-[10px] text-slate-400 font-medium block">Resta Pagar</span>
+                          <span
+                            className={`text-xs font-bold ${
+                              family.familyPendingAmount === 0
+                                ? "text-emerald-600 dark:text-emerald-400"
+                                : "text-amber-600 dark:text-amber-400"
+                            }`}
+                          >
+                            R$ {family.familyPendingAmount.toFixed(2)}
+                          </span>
+                        </div>
                       </div>
 
-                      <div className="flex items-center gap-1.5">
-                        {event.pixKey && (
+                      {family.familyTotalCost > 0 && (
+                        <div className="space-y-1">
+                          <div className="w-full bg-slate-100 dark:bg-slate-800 rounded-full h-1.5 overflow-hidden">
+                            <div
+                              className={`h-full transition-all duration-300 ${
+                                family.familyPendingAmount === 0 ? "bg-emerald-500" : "bg-blue-500"
+                              }`}
+                              style={{
+                                width: `${Math.min(
+                                  100,
+                                  Math.round((family.familyTotalPaid / family.familyTotalCost) * 100)
+                                )}%`,
+                              }}
+                            />
+                          </div>
+                          <div className="flex justify-between items-center text-[10px] text-slate-400">
+                            <span>
+                              {family.payments?.length || 0} lançamento(s)
+                            </span>
+                            <span>
+                              {Math.min(
+                                100,
+                                Math.round((family.familyTotalPaid / family.familyTotalCost) * 100)
+                              )}
+                              % pago
+                            </span>
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Ações da Família */}
+                      <div className="flex flex-wrap items-center justify-between gap-2 pt-1">
+                        {event.canEdit ? (
                           <button
-                            onClick={() => handleOpenFamilyPix(family)}
-                            className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-semibold bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 transition-colors"
-                            title="Ver Pix da Família"
+                            onClick={() => handleOpenPaymentModal(family)}
+                            className="inline-flex items-center gap-1.5 px-3 py-2 sm:py-1.5 rounded-xl text-xs font-semibold bg-emerald-50 hover:bg-emerald-100 dark:bg-emerald-950/60 dark:hover:bg-emerald-900/60 text-emerald-700 dark:text-emerald-300 transition-colors"
+                            title="Lançar pagamento ou ver histórico"
                           >
-                            <QrCode className="w-3.5 h-3.5" />
-                            Pix
+                            <DollarSign className="w-3.5 h-3.5" />
+                            <span>Registrar Pagamento</span>
                           </button>
+                        ) : (
+                          <div />
                         )}
 
-                        {event.canEdit && (
-                          <>
+                        <div className="flex items-center gap-1.5">
+                          {event.pixKey && (
                             <button
-                              onClick={() => handleOpenEditFamily(family)}
-                              title="Editar Família e Membros"
-                              className="p-1.5 text-slate-500 hover:text-emerald-600 dark:text-slate-400 dark:hover:text-emerald-400 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
+                              onClick={() => handleOpenFamilyPix(family)}
+                              className="inline-flex items-center gap-1 px-3 py-2 sm:py-1.5 rounded-xl text-xs font-semibold bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 transition-colors"
+                              title={
+                                family.familyPendingAmount > 0
+                                  ? `Gerar Pix com saldo pendente de R$ ${family.familyPendingAmount.toFixed(2)}`
+                                  : "Ver dados do Pix"
+                              }
                             >
-                              <Pencil className="w-4 h-4" />
+                              <QrCode className="w-3.5 h-3.5" />
+                              <span>Pix</span>
                             </button>
+                          )}
 
-                            <button
-                              onClick={() => handleDeleteFamily(family.id)}
-                              title="Remover família"
-                              className="p-1.5 text-slate-400 hover:text-rose-500 rounded-lg hover:bg-rose-50 dark:hover:bg-rose-950/40 transition-colors"
-                            >
-                              <Trash2 className="w-4 h-4" />
-                            </button>
-                          </>
-                        )}
+                          {event.canEdit && (
+                            <>
+                              <button
+                                onClick={() => handleOpenEditFamily(family)}
+                                title="Editar Família e Membros"
+                                className="p-2 sm:p-1.5 text-slate-500 hover:text-emerald-600 dark:text-slate-400 dark:hover:text-emerald-400 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
+                              >
+                                <Pencil className="w-4 h-4" />
+                              </button>
+
+                              <button
+                                onClick={() => handleDeleteFamily(family.id)}
+                                title="Remover família"
+                                className="p-2 sm:p-1.5 text-slate-400 hover:text-rose-500 rounded-lg hover:bg-rose-50 dark:hover:bg-rose-950/40 transition-colors"
+                              >
+                                <Trash2 className="w-4 h-4" />
+                              </button>
+                            </>
+                          )}
+                        </div>
                       </div>
                     </div>
                   </div>
@@ -887,74 +1094,144 @@ export default function EventDetailPage({
                 )}
               </div>
             ) : (
-              <div className="bg-white dark:bg-[#0f172a] rounded-2xl border border-slate-200 dark:border-slate-800 overflow-hidden shadow-sm">
-                <table className="w-full text-left text-xs sm:text-sm">
-                  <thead className="bg-slate-50 dark:bg-slate-900/80 text-slate-500 font-semibold border-b border-slate-200 dark:border-slate-800">
-                    <tr>
-                      <th className="py-3.5 px-4">Descrição da Despesa</th>
-                      <th className="py-3.5 px-4">Categoria</th>
-                      <th className="py-3.5 px-4">Vencimento</th>
-                      <th className="py-3.5 px-4 text-right">Valor</th>
-                      {event.canEdit && <th className="py-3.5 px-4 text-right">Ações</th>}
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
-                    {event.costs.map((cost) => (
-                      <tr key={cost.id} className="hover:bg-slate-50/50 dark:hover:bg-slate-900/30">
-                        <td className="py-3.5 px-4 font-semibold text-slate-900 dark:text-white">
-                          {cost.name}
-                        </td>
-                        <td className="py-3.5 px-4 text-slate-500 dark:text-slate-400">
+              <div className="space-y-4">
+                {/* Mobile Cards View (< 768px) */}
+                <div className="block md:hidden space-y-3">
+                  {event.costs.map((cost) => (
+                    <div
+                      key={cost.id}
+                      className="p-4 rounded-2xl bg-white dark:bg-[#0f172a] border border-slate-200 dark:border-slate-800 shadow-sm space-y-3"
+                    >
+                      <div className="flex items-start justify-between gap-2">
+                        <div className="space-y-0.5">
+                          <span className="font-bold text-slate-900 dark:text-white text-sm block">
+                            {cost.name}
+                          </span>
+                          <span className="text-[11px] text-slate-400 block">
+                            {cost.dueDate
+                              ? `Vencimento: ${new Date(cost.dueDate).toLocaleDateString("pt-BR")}`
+                              : "Sem data de vencimento"}
+                          </span>
+                        </div>
+                        <span className="px-2 py-0.5 rounded-md text-[10px] font-semibold bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300 shrink-0">
                           {cost.category || "Geral"}
-                        </td>
-                        <td className="py-3.5 px-4 text-slate-500 dark:text-slate-400">
-                          {cost.dueDate
-                            ? new Date(cost.dueDate).toLocaleDateString("pt-BR")
-                            : "Sem data"}
-                        </td>
-                        <td className="py-3.5 px-4 text-right font-bold text-slate-900 dark:text-white">
+                        </span>
+                      </div>
+
+                      <div className="flex items-center justify-between pt-2 border-t border-slate-100 dark:border-slate-800/80">
+                        <div className="text-base font-bold text-slate-900 dark:text-white">
                           R$ {cost.amount.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}
-                        </td>
+                        </div>
+
                         {event.canEdit && (
-                          <td className="py-3.5 px-4 text-right">
-                            <div className="flex items-center justify-end gap-1">
-                              <button
-                                onClick={() =>
-                                  setEditingCost({
-                                    ...cost,
-                                    dueDate: cost.dueDate ? cost.dueDate.slice(0, 10) : "",
-                                  })
-                                }
-                                title="Editar Despesa"
-                                className="p-1.5 text-slate-500 hover:text-emerald-600 dark:text-slate-400 dark:hover:text-emerald-400 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
-                              >
-                                <Pencil className="w-4 h-4" />
-                              </button>
-                              <button
-                                onClick={() => handleDeleteCost(cost.id)}
-                                title="Excluir Despesa"
-                                className="p-1.5 text-slate-400 hover:text-rose-500 rounded-lg hover:bg-rose-50 dark:hover:bg-rose-950/40 transition-colors"
-                              >
-                                <Trash2 className="w-4 h-4" />
-                              </button>
-                            </div>
-                          </td>
+                          <div className="flex items-center gap-1.5">
+                            <button
+                              onClick={() =>
+                                setEditingCost({
+                                  ...cost,
+                                  dueDate: cost.dueDate ? cost.dueDate.slice(0, 10) : "",
+                                })
+                              }
+                              className="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg text-xs font-semibold text-slate-700 dark:text-slate-300 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 transition-colors"
+                              title="Editar Despesa"
+                            >
+                              <Pencil className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400" />
+                              <span>Editar</span>
+                            </button>
+                            <button
+                              onClick={() => handleDeleteCost(cost.id)}
+                              className="p-2 text-slate-400 hover:text-rose-500 rounded-lg hover:bg-rose-50 dark:hover:bg-rose-950/40 transition-colors"
+                              title="Excluir Despesa"
+                            >
+                              <Trash2 className="w-4 h-4" />
+                            </button>
+                          </div>
                         )}
+                      </div>
+                    </div>
+                  ))}
+
+                  {/* Card de Resumo Total no Mobile */}
+                  <div className="p-4 rounded-2xl bg-emerald-50/80 dark:bg-emerald-950/40 border border-emerald-200/80 dark:border-emerald-900/60 flex items-center justify-between">
+                    <span className="text-xs font-bold text-emerald-900 dark:text-emerald-200">
+                      Total Geral de Custos:
+                    </span>
+                    <span className="text-lg font-black text-emerald-700 dark:text-emerald-300">
+                      R$ {event.totalCosts.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}
+                    </span>
+                  </div>
+                </div>
+
+                {/* Desktop Table View (>= 768px) */}
+                <div className="hidden md:block bg-white dark:bg-[#0f172a] rounded-2xl border border-slate-200 dark:border-slate-800 overflow-hidden shadow-sm">
+                  <table className="w-full text-left text-xs sm:text-sm">
+                    <thead className="bg-slate-50 dark:bg-slate-900/80 text-slate-500 font-semibold border-b border-slate-200 dark:border-slate-800">
+                      <tr>
+                        <th className="py-3.5 px-4">Descrição da Despesa</th>
+                        <th className="py-3.5 px-4">Categoria</th>
+                        <th className="py-3.5 px-4">Vencimento</th>
+                        <th className="py-3.5 px-4 text-right">Valor</th>
+                        {event.canEdit && <th className="py-3.5 px-4 text-right">Ações</th>}
                       </tr>
-                    ))}
-                  </tbody>
-                  <tfoot className="bg-slate-50 dark:bg-slate-900/80 font-bold border-t border-slate-200 dark:border-slate-800">
-                    <tr>
-                      <td colSpan={3} className="py-3.5 px-4 text-slate-700 dark:text-slate-300">
-                        Total Geral de Custos:
-                      </td>
-                      <td className="py-3.5 px-4 text-right text-emerald-600 dark:text-emerald-400 text-base">
-                        R$ {event.totalCosts.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}
-                      </td>
-                      {event.canEdit && <td />}
-                    </tr>
-                  </tfoot>
-                </table>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
+                      {event.costs.map((cost) => (
+                        <tr key={cost.id} className="hover:bg-slate-50/50 dark:hover:bg-slate-900/30">
+                          <td className="py-3.5 px-4 font-semibold text-slate-900 dark:text-white">
+                            {cost.name}
+                          </td>
+                          <td className="py-3.5 px-4 text-slate-500 dark:text-slate-400">
+                            {cost.category || "Geral"}
+                          </td>
+                          <td className="py-3.5 px-4 text-slate-500 dark:text-slate-400">
+                            {cost.dueDate
+                              ? new Date(cost.dueDate).toLocaleDateString("pt-BR")
+                              : "Sem data"}
+                          </td>
+                          <td className="py-3.5 px-4 text-right font-bold text-slate-900 dark:text-white">
+                            R$ {cost.amount.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}
+                          </td>
+                          {event.canEdit && (
+                            <td className="py-3.5 px-4 text-right">
+                              <div className="flex items-center justify-end gap-1">
+                                <button
+                                  onClick={() =>
+                                    setEditingCost({
+                                      ...cost,
+                                      dueDate: cost.dueDate ? cost.dueDate.slice(0, 10) : "",
+                                    })
+                                  }
+                                  title="Editar Despesa"
+                                  className="p-1.5 text-slate-500 hover:text-emerald-600 dark:text-slate-400 dark:hover:text-emerald-400 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
+                                >
+                                  <Pencil className="w-4 h-4" />
+                                </button>
+                                <button
+                                  onClick={() => handleDeleteCost(cost.id)}
+                                  title="Excluir Despesa"
+                                  className="p-1.5 text-slate-400 hover:text-rose-500 rounded-lg hover:bg-rose-50 dark:hover:bg-rose-950/40 transition-colors"
+                                >
+                                  <Trash2 className="w-4 h-4" />
+                                </button>
+                              </div>
+                            </td>
+                          )}
+                        </tr>
+                      ))}
+                    </tbody>
+                    <tfoot className="bg-slate-50 dark:bg-slate-900/80 font-bold border-t border-slate-200 dark:border-slate-800">
+                      <tr>
+                        <td colSpan={3} className="py-3.5 px-4 text-slate-700 dark:text-slate-300">
+                          Total Geral de Custos:
+                        </td>
+                        <td className="py-3.5 px-4 text-right text-emerald-600 dark:text-emerald-400 text-base">
+                          R$ {event.totalCosts.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}
+                        </td>
+                        {event.canEdit && <td />}
+                      </tr>
+                    </tfoot>
+                  </table>
+                </div>
               </div>
             )}
           </div>
@@ -1242,26 +1519,26 @@ export default function EventDetailPage({
                       {membersList.map((m) => (
                         <div
                           key={m.id}
-                          className="flex items-center justify-between p-3 rounded-xl bg-slate-50 dark:bg-slate-900/50 border border-slate-100 dark:border-slate-800"
+                          className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 p-3 rounded-xl bg-slate-50 dark:bg-slate-900/50 border border-slate-100 dark:border-slate-800"
                         >
-                          <div className="flex items-center gap-3">
-                            <div className="w-8 h-8 rounded-full bg-blue-100 dark:bg-blue-950 text-blue-600 dark:text-blue-400 font-bold flex items-center justify-center text-xs">
+                          <div className="flex items-center gap-3 min-w-0">
+                            <div className="w-8 h-8 rounded-full bg-blue-100 dark:bg-blue-950 text-blue-600 dark:text-blue-400 font-bold flex items-center justify-center text-xs shrink-0">
                               {m.user.name.charAt(0).toUpperCase()}
                             </div>
-                            <div>
-                              <span className="text-xs font-bold text-slate-900 dark:text-white block">
+                            <div className="min-w-0">
+                              <span className="text-xs font-bold text-slate-900 dark:text-white block truncate">
                                 {m.user.name}
                               </span>
-                              <span className="text-[11px] text-slate-500">{m.user.email}</span>
+                              <span className="text-[11px] text-slate-500 block truncate">{m.user.email}</span>
                             </div>
                           </div>
 
-                          <div className="flex items-center gap-3">
+                          <div className="flex items-center justify-between sm:justify-end gap-2.5 pt-1.5 sm:pt-0 border-t sm:border-t-0 border-slate-200/50 dark:border-slate-800/80">
                             {event.isOwner ? (
                               <button
                                 onClick={() => handleToggleMemberPermission(m)}
                                 title="Clique para alternar permissão de edição"
-                                className={`text-xs font-semibold px-2.5 py-1 rounded-full transition-colors ${
+                                className={`text-xs font-semibold px-3 py-1 rounded-full transition-colors ${
                                   m.canEdit
                                     ? "bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300 hover:opacity-80"
                                     : "bg-slate-200 text-slate-700 dark:bg-slate-800 dark:text-slate-400 hover:opacity-80"
@@ -1279,7 +1556,7 @@ export default function EventDetailPage({
                               <button
                                 onClick={() => handleRemoveMember(m.id)}
                                 title="Remover Co-Organizador"
-                                className="p-1 text-slate-400 hover:text-rose-500 rounded transition-colors"
+                                className="p-1.5 text-slate-400 hover:text-rose-500 rounded-lg hover:bg-rose-50 dark:hover:bg-rose-950/40 transition-colors"
                               >
                                 <Trash2 className="w-4 h-4" />
                               </button>
@@ -1372,8 +1649,8 @@ export default function EventDetailPage({
             MODAL: ADICIONAR DESPESA
             ======================================================== */}
         {showAddCost && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
-            <div className="bg-white dark:bg-[#0f172a] rounded-3xl border border-slate-200 dark:border-slate-800 p-6 max-w-md w-full shadow-2xl">
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-black/60 backdrop-blur-sm overflow-y-auto">
+            <div className="bg-white dark:bg-[#0f172a] rounded-3xl border border-slate-200 dark:border-slate-800 p-5 sm:p-6 max-w-md w-full shadow-2xl my-auto max-h-[90vh] overflow-y-auto">
               <h3 className="text-lg font-bold text-slate-900 dark:text-white mb-4">
                 Adicionar Despesa ao Evento
               </h3>
@@ -1389,11 +1666,11 @@ export default function EventDetailPage({
                     placeholder="Ex: Aluguel do Rancho, Carvão, Limpeza"
                     value={newCost.name}
                     onChange={(e) => setNewCost({ ...newCost, name: e.target.value })}
-                    className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-900 dark:text-white text-sm"
+                    className="w-full px-3 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-900 dark:text-white text-sm"
                   />
                 </div>
 
-                <div className="grid grid-cols-2 gap-3">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                   <div>
                     <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
                       Valor Total (R$) *
@@ -1405,7 +1682,7 @@ export default function EventDetailPage({
                       placeholder="1200.00"
                       value={newCost.amount}
                       onChange={(e) => setNewCost({ ...newCost, amount: e.target.value })}
-                      className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-900 dark:text-white text-sm"
+                      className="w-full px-3 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-900 dark:text-white text-sm"
                     />
                   </div>
 
@@ -1417,7 +1694,7 @@ export default function EventDetailPage({
                       type="date"
                       value={newCost.dueDate}
                       onChange={(e) => setNewCost({ ...newCost, dueDate: e.target.value })}
-                      className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-900 dark:text-white text-sm"
+                      className="w-full px-3 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-900 dark:text-white text-sm"
                     />
                   </div>
                 </div>
@@ -1429,7 +1706,7 @@ export default function EventDetailPage({
                   <select
                     value={newCost.category}
                     onChange={(e) => setNewCost({ ...newCost, category: e.target.value })}
-                    className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-900 dark:text-white text-sm"
+                    className="w-full px-3 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-900 dark:text-white text-sm"
                   >
                     <option value="ACOMODACAO">Acomodação / Rancho</option>
                     <option value="ALIMENTACAO">Alimentação & Bebidas</option>
@@ -1438,17 +1715,17 @@ export default function EventDetailPage({
                   </select>
                 </div>
 
-                <div className="flex items-center justify-end gap-3 pt-4">
+                <div className="flex items-center justify-end gap-3 pt-4 border-t border-slate-100 dark:border-slate-800">
                   <button
                     type="button"
                     onClick={() => setShowAddCost(false)}
-                    className="px-4 py-2 rounded-xl text-xs font-semibold text-slate-500 hover:text-slate-800 dark:hover:text-slate-200"
+                    className="px-4 py-2.5 rounded-xl text-xs font-semibold text-slate-500 hover:text-slate-800 dark:hover:text-slate-200"
                   >
                     Cancelar
                   </button>
                   <button
                     type="submit"
-                    className="px-4 py-2 rounded-xl text-xs font-semibold bg-emerald-600 hover:bg-emerald-700 text-white shadow-sm"
+                    className="px-4 py-2.5 rounded-xl text-xs font-semibold bg-emerald-600 hover:bg-emerald-700 text-white shadow-sm"
                   >
                     Salvar Custo
                   </button>
@@ -1462,8 +1739,8 @@ export default function EventDetailPage({
             MODAL: EDITAR DESPESA (NOVO)
             ======================================================== */}
         {editingCost && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
-            <div className="bg-white dark:bg-[#0f172a] rounded-3xl border border-slate-200 dark:border-slate-800 p-6 max-w-md w-full shadow-2xl">
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-black/60 backdrop-blur-sm overflow-y-auto">
+            <div className="bg-white dark:bg-[#0f172a] rounded-3xl border border-slate-200 dark:border-slate-800 p-5 sm:p-6 max-w-md w-full shadow-2xl my-auto max-h-[90vh] overflow-y-auto">
               <h3 className="text-lg font-bold text-slate-900 dark:text-white mb-4">
                 Editar Despesa
               </h3>
@@ -1478,11 +1755,11 @@ export default function EventDetailPage({
                     required
                     value={editingCost.name}
                     onChange={(e) => setEditingCost({ ...editingCost, name: e.target.value })}
-                    className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-900 dark:text-white text-sm"
+                    className="w-full px-3 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-900 dark:text-white text-sm"
                   />
                 </div>
 
-                <div className="grid grid-cols-2 gap-3">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                   <div>
                     <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
                       Valor Total (R$) *
@@ -1493,7 +1770,7 @@ export default function EventDetailPage({
                       required
                       value={editingCost.amount}
                       onChange={(e) => setEditingCost({ ...editingCost, amount: parseFloat(e.target.value) || 0 })}
-                      className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-900 dark:text-white text-sm"
+                      className="w-full px-3 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-900 dark:text-white text-sm"
                     />
                   </div>
 
@@ -1505,7 +1782,7 @@ export default function EventDetailPage({
                       type="date"
                       value={editingCost.dueDate || ""}
                       onChange={(e) => setEditingCost({ ...editingCost, dueDate: e.target.value })}
-                      className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-900 dark:text-white text-sm"
+                      className="w-full px-3 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-900 dark:text-white text-sm"
                     />
                   </div>
                 </div>
@@ -1517,7 +1794,7 @@ export default function EventDetailPage({
                   <select
                     value={editingCost.category || "ACOMODACAO"}
                     onChange={(e) => setEditingCost({ ...editingCost, category: e.target.value })}
-                    className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-900 dark:text-white text-sm"
+                    className="w-full px-3 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-900 dark:text-white text-sm"
                   >
                     <option value="ACOMODACAO">Acomodação / Rancho</option>
                     <option value="ALIMENTACAO">Alimentação & Bebidas</option>
@@ -1526,17 +1803,17 @@ export default function EventDetailPage({
                   </select>
                 </div>
 
-                <div className="flex items-center justify-end gap-3 pt-4">
+                <div className="flex items-center justify-end gap-3 pt-4 border-t border-slate-100 dark:border-slate-800">
                   <button
                     type="button"
                     onClick={() => setEditingCost(null)}
-                    className="px-4 py-2 rounded-xl text-xs font-semibold text-slate-500 hover:text-slate-800 dark:hover:text-slate-200"
+                    className="px-4 py-2.5 rounded-xl text-xs font-semibold text-slate-500 hover:text-slate-800 dark:hover:text-slate-200"
                   >
                     Cancelar
                   </button>
                   <button
                     type="submit"
-                    className="px-4 py-2 rounded-xl text-xs font-semibold bg-emerald-600 hover:bg-emerald-700 text-white shadow-sm"
+                    className="px-4 py-2.5 rounded-xl text-xs font-semibold bg-emerald-600 hover:bg-emerald-700 text-white shadow-sm"
                   >
                     Salvar Alterações
                   </button>
@@ -1550,8 +1827,8 @@ export default function EventDetailPage({
             MODAL: ADICIONAR FAMÍLIA MANUALMENTE
             ======================================================== */}
         {showAddFamily && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm overflow-y-auto">
-            <div className="bg-white dark:bg-[#0f172a] rounded-3xl border border-slate-200 dark:border-slate-800 p-6 max-w-lg w-full shadow-2xl my-8">
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-black/60 backdrop-blur-sm overflow-y-auto">
+            <div className="bg-white dark:bg-[#0f172a] rounded-3xl border border-slate-200 dark:border-slate-800 p-5 sm:p-6 max-w-lg w-full shadow-2xl my-auto max-h-[90vh] overflow-y-auto">
               <h3 className="text-lg font-bold text-slate-900 dark:text-white mb-2">
                 Adicionar Família Manualmente
               </h3>
@@ -1571,7 +1848,7 @@ export default function EventDetailPage({
                       placeholder="Ex: Família Curti"
                       value={newFamily.familyName}
                       onChange={(e) => setNewFamily({ ...newFamily, familyName: e.target.value })}
-                      className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-900 dark:text-white text-sm"
+                      className="w-full px-3 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-900 dark:text-white text-sm"
                     />
                   </div>
 
@@ -1585,7 +1862,7 @@ export default function EventDetailPage({
                       placeholder="Ex: Carlos Curti"
                       value={newFamily.responsibleName}
                       onChange={(e) => setNewFamily({ ...newFamily, responsibleName: e.target.value })}
-                      className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-900 dark:text-white text-sm"
+                      className="w-full px-3 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-900 dark:text-white text-sm"
                     />
                   </div>
                 </div>
@@ -1599,7 +1876,7 @@ export default function EventDetailPage({
                     placeholder="(11) 99999-8888"
                     value={newFamily.responsiblePhone}
                     onChange={(e) => setNewFamily({ ...newFamily, responsiblePhone: e.target.value })}
-                    className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-900 dark:text-white text-sm"
+                    className="w-full px-3 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-900 dark:text-white text-sm"
                   />
                 </div>
 
@@ -1624,9 +1901,12 @@ export default function EventDetailPage({
                     </button>
                   </div>
 
-                  <div className="space-y-2 max-h-48 overflow-y-auto pr-1">
+                  <div className="space-y-2.5 max-h-52 overflow-y-auto pr-1">
                     {newFamily.members.map((member, idx) => (
-                      <div key={idx} className="flex items-center gap-2">
+                      <div
+                        key={idx}
+                        className="p-2.5 rounded-xl bg-slate-50 dark:bg-slate-900/60 border border-slate-200/60 dark:border-slate-800 space-y-2"
+                      >
                         <input
                           type="text"
                           required
@@ -1637,65 +1917,68 @@ export default function EventDetailPage({
                             updated[idx].name = e.target.value;
                             setNewFamily({ ...newFamily, members: updated });
                           }}
-                          className="flex-1 px-3 py-1.5 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-xs text-slate-900 dark:text-white"
+                          className="w-full px-3 py-2 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-xs text-slate-900 dark:text-white"
                         />
-                        <input
-                          type="number"
-                          required
-                          min={0}
-                          max={100}
-                          placeholder="Idade"
-                          value={member.age}
-                          onChange={(e) => {
-                            const updated = [...newFamily.members];
-                            updated[idx].age = e.target.value;
-                            setNewFamily({ ...newFamily, members: updated });
-                          }}
-                          className="w-20 px-2 py-1.5 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-xs text-center text-slate-900 dark:text-white"
-                        />
-                        <select
-                          value={member.gender}
-                          onChange={(e) => {
-                            const updated = [...newFamily.members];
-                            updated[idx].gender = e.target.value;
-                            setNewFamily({ ...newFamily, members: updated });
-                          }}
-                          className="w-24 px-2 py-1.5 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-xs text-slate-900 dark:text-white"
-                        >
-                          <option value="MALE">Homem</option>
-                          <option value="FEMALE">Mulher</option>
-                          <option value="OTHER">Outro</option>
-                        </select>
-                        {newFamily.members.length > 1 && (
-                          <button
-                            type="button"
-                            onClick={() =>
-                              setNewFamily({
-                                ...newFamily,
-                                members: newFamily.members.filter((_, i) => i !== idx),
-                              })
-                            }
-                            className="p-1 text-slate-400 hover:text-rose-500"
+                        <div className="flex items-center gap-2">
+                          <input
+                            type="number"
+                            required
+                            min={0}
+                            max={100}
+                            placeholder="Idade"
+                            value={member.age}
+                            onChange={(e) => {
+                              const updated = [...newFamily.members];
+                              updated[idx].age = e.target.value;
+                              setNewFamily({ ...newFamily, members: updated });
+                            }}
+                            className="w-20 px-2 py-2 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-xs text-center text-slate-900 dark:text-white"
+                          />
+                          <select
+                            value={member.gender}
+                            onChange={(e) => {
+                              const updated = [...newFamily.members];
+                              updated[idx].gender = e.target.value;
+                              setNewFamily({ ...newFamily, members: updated });
+                            }}
+                            className="flex-1 px-2 py-2 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-xs text-slate-900 dark:text-white"
                           >
-                            <Trash2 className="w-3.5 h-3.5" />
-                          </button>
-                        )}
+                            <option value="MALE">Homem</option>
+                            <option value="FEMALE">Mulher</option>
+                            <option value="OTHER">Outro</option>
+                          </select>
+                          {newFamily.members.length > 1 && (
+                            <button
+                              type="button"
+                              onClick={() =>
+                                setNewFamily({
+                                  ...newFamily,
+                                  members: newFamily.members.filter((_, i) => i !== idx),
+                                })
+                              }
+                              className="p-2 text-slate-400 hover:text-rose-500 rounded-lg hover:bg-rose-50 dark:hover:bg-rose-950/40"
+                              title="Remover membro"
+                            >
+                              <Trash2 className="w-4 h-4" />
+                            </button>
+                          )}
+                        </div>
                       </div>
                     ))}
                   </div>
                 </div>
 
-                <div className="flex items-center justify-end gap-3 pt-4">
+                <div className="flex items-center justify-end gap-3 pt-4 border-t border-slate-100 dark:border-slate-800">
                   <button
                     type="button"
                     onClick={() => setShowAddFamily(false)}
-                    className="px-4 py-2 rounded-xl text-xs font-semibold text-slate-500 hover:text-slate-800 dark:hover:text-slate-200"
+                    className="px-4 py-2.5 rounded-xl text-xs font-semibold text-slate-500 hover:text-slate-800 dark:hover:text-slate-200"
                   >
                     Cancelar
                   </button>
                   <button
                     type="submit"
-                    className="px-4 py-2 rounded-xl text-xs font-semibold bg-emerald-600 hover:bg-emerald-700 text-white shadow-sm"
+                    className="px-4 py-2.5 rounded-xl text-xs font-semibold bg-emerald-600 hover:bg-emerald-700 text-white shadow-sm"
                   >
                     Salvar Família
                   </button>
@@ -1709,8 +1992,8 @@ export default function EventDetailPage({
             MODAL: EDITAR FAMÍLIA E MEMBROS (NOVO)
             ======================================================== */}
         {editingFamily && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm overflow-y-auto">
-            <div className="bg-white dark:bg-[#0f172a] rounded-3xl border border-slate-200 dark:border-slate-800 p-6 max-w-lg w-full shadow-2xl my-8">
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-black/60 backdrop-blur-sm overflow-y-auto">
+            <div className="bg-white dark:bg-[#0f172a] rounded-3xl border border-slate-200 dark:border-slate-800 p-5 sm:p-6 max-w-lg w-full shadow-2xl my-auto max-h-[90vh] overflow-y-auto">
               <div className="flex items-center justify-between mb-2">
                 <h3 className="text-lg font-bold text-slate-900 dark:text-white">
                   Editar Família e Participantes
@@ -1738,7 +2021,7 @@ export default function EventDetailPage({
                       required
                       value={editingFamily.familyName}
                       onChange={(e) => setEditingFamily({ ...editingFamily, familyName: e.target.value })}
-                      className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-900 dark:text-white text-sm"
+                      className="w-full px-3 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-900 dark:text-white text-sm"
                     />
                   </div>
 
@@ -1751,7 +2034,7 @@ export default function EventDetailPage({
                       required
                       value={editingFamily.responsibleName}
                       onChange={(e) => setEditingFamily({ ...editingFamily, responsibleName: e.target.value })}
-                      className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-900 dark:text-white text-sm"
+                      className="w-full px-3 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-900 dark:text-white text-sm"
                     />
                   </div>
                 </div>
@@ -1764,7 +2047,7 @@ export default function EventDetailPage({
                     type="text"
                     value={editingFamily.responsiblePhone}
                     onChange={(e) => setEditingFamily({ ...editingFamily, responsiblePhone: e.target.value })}
-                    className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-900 dark:text-white text-sm"
+                    className="w-full px-3 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-900 dark:text-white text-sm"
                   />
                 </div>
 
@@ -1789,13 +2072,16 @@ export default function EventDetailPage({
                     </button>
                   </div>
 
-                  <div className="space-y-2 max-h-56 overflow-y-auto pr-1">
+                  <div className="space-y-2.5 max-h-56 overflow-y-auto pr-1">
                     {editingFamily.members.map((member, idx) => {
                       const ageNum = parseInt(member.age) || 0;
                       const isPaying = ageNum >= event.minPayingAge;
 
                       return (
-                        <div key={idx} className="flex items-center gap-2">
+                        <div
+                          key={idx}
+                          className="p-2.5 rounded-xl bg-slate-50 dark:bg-slate-900/60 border border-slate-200/60 dark:border-slate-800 space-y-2"
+                        >
                           <input
                             type="text"
                             required
@@ -1806,77 +2092,80 @@ export default function EventDetailPage({
                               updated[idx].name = e.target.value;
                               setEditingFamily({ ...editingFamily, members: updated });
                             }}
-                            className="flex-1 px-3 py-1.5 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-xs text-slate-900 dark:text-white"
+                            className="w-full px-3 py-2 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-xs text-slate-900 dark:text-white"
                           />
-                          <input
-                            type="number"
-                            required
-                            min={0}
-                            max={100}
-                            placeholder="Idade"
-                            value={member.age}
-                            onChange={(e) => {
-                              const updated = [...editingFamily.members];
-                              updated[idx].age = e.target.value;
-                              setEditingFamily({ ...editingFamily, members: updated });
-                            }}
-                            className="w-16 px-2 py-1.5 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-xs text-center text-slate-900 dark:text-white"
-                          />
-                          <select
-                            value={member.gender}
-                            onChange={(e) => {
-                              const updated = [...editingFamily.members];
-                              updated[idx].gender = e.target.value;
-                              setEditingFamily({ ...editingFamily, members: updated });
-                            }}
-                            className="w-20 px-1.5 py-1.5 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-xs text-slate-900 dark:text-white"
-                          >
-                            <option value="MALE">Homem</option>
-                            <option value="FEMALE">Mulher</option>
-                            <option value="OTHER">Outro</option>
-                          </select>
-
-                          <span
-                            className={`text-[9px] font-bold px-1.5 py-1 rounded shrink-0 ${
-                              isPaying
-                                ? "bg-blue-100 text-blue-800 dark:bg-blue-950 dark:text-blue-300"
-                                : "bg-slate-200 text-slate-600 dark:bg-slate-800 dark:text-slate-400"
-                            }`}
-                          >
-                            {isPaying ? "Paga" : "Isento"}
-                          </span>
-
-                          {editingFamily.members.length > 1 && (
-                            <button
-                              type="button"
-                              onClick={() =>
-                                setEditingFamily({
-                                  ...editingFamily,
-                                  members: editingFamily.members.filter((_, i) => i !== idx),
-                                })
-                              }
-                              className="p-1 text-slate-400 hover:text-rose-500"
+                          <div className="flex items-center gap-2">
+                            <input
+                              type="number"
+                              required
+                              min={0}
+                              max={100}
+                              placeholder="Idade"
+                              value={member.age}
+                              onChange={(e) => {
+                                const updated = [...editingFamily.members];
+                                updated[idx].age = e.target.value;
+                                setEditingFamily({ ...editingFamily, members: updated });
+                              }}
+                              className="w-20 px-2 py-2 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-xs text-center text-slate-900 dark:text-white"
+                            />
+                            <select
+                              value={member.gender}
+                              onChange={(e) => {
+                                const updated = [...editingFamily.members];
+                                updated[idx].gender = e.target.value;
+                                setEditingFamily({ ...editingFamily, members: updated });
+                              }}
+                              className="flex-1 px-2 py-2 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-xs text-slate-900 dark:text-white"
                             >
-                              <Trash2 className="w-3.5 h-3.5" />
-                            </button>
-                          )}
+                              <option value="MALE">Homem</option>
+                              <option value="FEMALE">Mulher</option>
+                              <option value="OTHER">Outro</option>
+                            </select>
+
+                            <span
+                              className={`text-[10px] font-bold px-2 py-1 rounded shrink-0 ${
+                                isPaying
+                                  ? "bg-blue-100 text-blue-800 dark:bg-blue-950 dark:text-blue-300"
+                                  : "bg-slate-200 text-slate-600 dark:bg-slate-800 dark:text-slate-400"
+                              }`}
+                            >
+                              {isPaying ? "Paga" : "Isento"}
+                            </span>
+
+                            {editingFamily.members.length > 1 && (
+                              <button
+                                type="button"
+                                onClick={() =>
+                                  setEditingFamily({
+                                    ...editingFamily,
+                                    members: editingFamily.members.filter((_, i) => i !== idx),
+                                  })
+                                }
+                                className="p-2 text-slate-400 hover:text-rose-500 rounded-lg hover:bg-rose-50 dark:hover:bg-rose-950/40"
+                                title="Remover participante"
+                              >
+                                <Trash2 className="w-4 h-4" />
+                              </button>
+                            )}
+                          </div>
                         </div>
                       );
                     })}
                   </div>
                 </div>
 
-                <div className="flex items-center justify-end gap-3 pt-4">
+                <div className="flex items-center justify-end gap-3 pt-4 border-t border-slate-100 dark:border-slate-800">
                   <button
                     type="button"
                     onClick={() => setEditingFamily(null)}
-                    className="px-4 py-2 rounded-xl text-xs font-semibold text-slate-500 hover:text-slate-800 dark:hover:text-slate-200"
+                    className="px-4 py-2.5 rounded-xl text-xs font-semibold text-slate-500 hover:text-slate-800 dark:hover:text-slate-200"
                   >
                     Cancelar
                   </button>
                   <button
                     type="submit"
-                    className="px-4 py-2 rounded-xl text-xs font-semibold bg-emerald-600 hover:bg-emerald-700 text-white shadow-sm"
+                    className="px-4 py-2.5 rounded-xl text-xs font-semibold bg-emerald-600 hover:bg-emerald-700 text-white shadow-sm"
                   >
                     Salvar Alterações
                   </button>
@@ -1886,54 +2175,182 @@ export default function EventDetailPage({
           </div>
         )}
 
+
+
         {/* ========================================================
-            MODAL: PIX ESPECÍFICO DE FAMÍLIA
+            MODAL: PIX ESPECÍFICO DE FAMÍLIA (COM SALDO PENDENTE)
             ======================================================== */}
         {pixModalData && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
-            <div className="bg-white dark:bg-[#0f172a] rounded-3xl border border-slate-200 dark:border-slate-800 p-6 max-w-sm w-full shadow-2xl text-center space-y-4">
-              <h3 className="text-base font-bold text-slate-900 dark:text-white">
-                Cobrança Pix - {pixModalData.familyName}
-              </h3>
-
-              <div className="p-3 bg-slate-50 dark:bg-slate-900 rounded-xl">
-                <span className="text-xs text-slate-400 block font-medium">Valor Total da Cota</span>
-                <span className="text-2xl font-bold text-emerald-600 dark:text-emerald-400">
-                  R$ {pixModalData.amount.toFixed(2)}
-                </span>
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-black/60 backdrop-blur-sm overflow-y-auto">
+            <div className="bg-white dark:bg-[#0f172a] rounded-3xl border border-slate-200 dark:border-slate-800 p-5 sm:p-6 max-w-sm w-full shadow-2xl text-center space-y-4 my-auto max-h-[90vh] overflow-y-auto">
+              <div className="flex items-center justify-between">
+                <h3 className="text-base font-bold text-slate-900 dark:text-white text-left">
+                  Cobrança Pix - {pixModalData.familyName}
+                </h3>
+                <button
+                  onClick={() => setPixModalData(null)}
+                  className="p-1 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200"
+                >
+                  <X className="w-5 h-5" />
+                </button>
               </div>
 
-              {pixModalData.qrCode && (
-                <div className="flex justify-center p-3 bg-white rounded-2xl border border-slate-200 w-fit mx-auto shadow-sm">
-                  {/* eslint-disable-next-line @next/next/no-img-element */}
-                  <img
-                    src={pixModalData.qrCode}
-                    alt="QR Code Pix"
-                    className="w-48 h-48 rounded-lg"
-                  />
+              {/* Detalhamento de Cota, Pago e Pendente */}
+              <div className="grid grid-cols-3 gap-1 p-2.5 bg-slate-50 dark:bg-slate-900 rounded-2xl border border-slate-200/60 dark:border-slate-800 text-center">
+                <div>
+                  <span className="text-[10px] text-slate-400 block font-medium">Cota Total</span>
+                  <span className="text-xs font-bold text-slate-800 dark:text-slate-200">
+                    R$ {pixModalData.totalCost.toFixed(2)}
+                  </span>
                 </div>
-              )}
+                <div>
+                  <span className="text-[10px] text-slate-400 block font-medium">Já Pago</span>
+                  <span className="text-xs font-bold text-emerald-600 dark:text-emerald-400">
+                    R$ {pixModalData.totalPaid.toFixed(2)}
+                  </span>
+                </div>
+                <div>
+                  <span className="text-[10px] text-slate-400 block font-medium">Saldo Restante</span>
+                  <span
+                    className={`text-xs font-bold ${
+                      pixModalData.pendingAmount === 0
+                        ? "text-emerald-600"
+                        : "text-amber-600 dark:text-amber-400"
+                    }`}
+                  >
+                    R$ {pixModalData.pendingAmount.toFixed(2)}
+                  </span>
+                </div>
+              </div>
 
-              <button
-                onClick={() => {
-                  navigator.clipboard.writeText(pixModalData.payload);
-                  setCopiedPix(true);
-                  setTimeout(() => setCopiedPix(false), 2500);
-                }}
-                className="w-full py-2.5 px-3 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-medium text-xs flex items-center justify-center gap-2 shadow-sm transition-all"
-              >
-                {copiedPix ? (
-                  <>
-                    <Check className="w-4 h-4" />
-                    <span>Copia e Cola Copiado!</span>
-                  </>
-                ) : (
-                  <>
-                    <Copy className="w-4 h-4" />
-                    <span>Copiar Código Pix (Copia e Cola)</span>
-                  </>
-                )}
-              </button>
+              {pixModalData.isFullyPaid && pixModalData.amount === 0 ? (
+                <div className="p-4 rounded-2xl bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800 text-emerald-800 dark:text-emerald-300 space-y-2">
+                  <CheckCircle2 className="w-8 h-8 mx-auto text-emerald-600 dark:text-emerald-400" />
+                  <span className="text-xs font-bold block">Cota 100% Quitada!</span>
+                  <p className="text-[11px] text-emerald-700 dark:text-emerald-400">
+                    Esta família já quitou todos os valores previstos para este evento.
+                  </p>
+                </div>
+              ) : (
+                <>
+                  <div className="p-3 bg-emerald-50/50 dark:bg-emerald-950/30 rounded-2xl border border-emerald-100 dark:border-emerald-900/50">
+                    <span className="text-[11px] text-emerald-800 dark:text-emerald-400 block font-semibold">
+                      Valor deste QR Code Pix (Saldo Devedor):
+                    </span>
+                    <span className="text-2xl font-black text-emerald-600 dark:text-emerald-400">
+                      R$ {pixModalData.amount.toFixed(2)}
+                    </span>
+                    {pixModalData.amount === pixModalData.pendingAmount && (
+                      <span className="text-[10px] text-slate-400 block mt-0.5">
+                        Gerado automaticamente com o saldo pendente restante.
+                      </span>
+                    )}
+                  </div>
+
+                  {/* Ajuste de valor parcial opcional */}
+                  <div className="text-left space-y-1 pt-1">
+                    <label className="text-[10px] font-semibold text-slate-500 dark:text-slate-400 block">
+                      Ajustar valor do Pix (para pagamento parcial):
+                    </label>
+                    <div className="flex gap-1.5">
+                      <input
+                        type="number"
+                        step="0.01"
+                        min="1"
+                        placeholder="Ex: 100.00"
+                        value={customPixAmount}
+                        onChange={(e) => setCustomPixAmount(e.target.value)}
+                        className="flex-1 px-2.5 py-1.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-xs text-slate-900 dark:text-white"
+                      />
+                      <button
+                        type="button"
+                        disabled={loadingPixAmount || !customPixAmount || parseFloat(customPixAmount) <= 0}
+                        onClick={() => handleRecalculatePixWithAmount(parseFloat(customPixAmount))}
+                        className="px-3 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-900 text-white text-xs font-semibold disabled:opacity-50"
+                      >
+                        {loadingPixAmount ? "..." : "Atualizar"}
+                      </button>
+                      {pixModalData.amount !== pixModalData.pendingAmount && pixModalData.pendingAmount > 0 && (
+                        <button
+                          type="button"
+                          disabled={loadingPixAmount}
+                          onClick={() => {
+                            setCustomPixAmount(String(pixModalData.pendingAmount));
+                            handleRecalculatePixWithAmount(pixModalData.pendingAmount);
+                          }}
+                          className="px-2.5 py-1.5 rounded-xl bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 text-xs font-semibold"
+                          title="Restaurar valor do saldo pendente"
+                        >
+                          Saldo
+                        </button>
+                      )}
+                    </div>
+                  </div>
+
+                  {pixModalData.qrCode && (
+                    <div className="flex justify-center p-3 bg-white rounded-2xl border border-slate-200 w-fit mx-auto shadow-sm">
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                      <img
+                        src={pixModalData.qrCode}
+                        alt="QR Code Pix"
+                        className="w-44 h-44 rounded-lg"
+                      />
+                    </div>
+                  )}
+
+                  <div className="space-y-2 pt-1">
+                    <button
+                      onClick={() => {
+                        navigator.clipboard.writeText(pixModalData.payload);
+                        setCopiedPix(true);
+                        setTimeout(() => setCopiedPix(false), 2500);
+                      }}
+                      className="w-full py-2.5 px-3 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-medium text-xs flex items-center justify-center gap-2 shadow-sm transition-all"
+                    >
+                      {copiedPix ? (
+                        <>
+                          <Check className="w-4 h-4" />
+                          <span>Copia e Cola Copiado!</span>
+                        </>
+                      ) : (
+                        <>
+                          <Copy className="w-4 h-4" />
+                          <span>Copiar Chave Pix Copia e Cola</span>
+                        </>
+                      )}
+                    </button>
+
+                    <button
+                      onClick={() => {
+                        const phoneDigits = (pixModalData.responsiblePhone || "").replace(/\D/g, "");
+                        const msg = [
+                          `Olá, *${pixModalData.responsibleName}*! Segue a chave Pix para o rateio do evento *${event.title}*:\n`,
+                          `*Cota Total da Família:* R$ ${pixModalData.totalCost.toFixed(2)}`,
+                          `*Total já Pago:* R$ ${pixModalData.totalPaid.toFixed(2)}`,
+                          `*Saldo Pendente:* R$ ${pixModalData.pendingAmount.toFixed(2)}`,
+                          pixModalData.amount !== pixModalData.pendingAmount
+                            ? `*Valor deste Pix:* R$ ${pixModalData.amount.toFixed(2)}`
+                            : `*Valor do Pix:* R$ ${pixModalData.amount.toFixed(2)}`,
+                          `\n*Chave Pix Copia e Cola:*`,
+                          `${pixModalData.payload}\n`,
+                          `Após realizar o pagamento, por favor envie o comprovante por aqui. Obrigado!`
+                        ].join("\n");
+
+                        if (phoneDigits) {
+                          window.open(`https://wa.me/55${phoneDigits}?text=${encodeURIComponent(msg)}`, "_blank");
+                        } else {
+                          navigator.clipboard.writeText(msg);
+                          alert("Mensagem de cobrança Pix copiada! Cole na conversa do WhatsApp do responsável.");
+                        }
+                      }}
+                      className="w-full py-2.5 px-3 rounded-xl bg-slate-800 hover:bg-slate-900 text-white font-medium text-xs flex items-center justify-center gap-2 shadow-sm transition-all"
+                    >
+                      <Send className="w-4 h-4 text-emerald-400" />
+                      <span>Cobrar no WhatsApp da Família</span>
+                    </button>
+                  </div>
+                </>
+              )}
 
               <button
                 onClick={() => setPixModalData(null)}
@@ -1941,6 +2358,215 @@ export default function EventDetailPage({
               >
                 Fechar
               </button>
+            </div>
+          </div>
+        )}
+
+        {/* ========================================================
+            MODAL: REGISTRO E HISTÓRICO DE PAGAMENTOS DA FAMÍLIA
+            ======================================================== */}
+        {paymentModalFamily && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-black/60 backdrop-blur-sm overflow-y-auto">
+            <div className="bg-white dark:bg-[#0f172a] rounded-3xl border border-slate-200 dark:border-slate-800 p-5 sm:p-6 max-w-lg w-full shadow-2xl space-y-5 my-auto max-h-[90vh] overflow-y-auto">
+              <div className="flex items-center justify-between">
+                <div>
+                  <h3 className="text-base font-bold text-slate-900 dark:text-white">
+                    Gestão de Pagamentos - {paymentModalFamily.familyName}
+                  </h3>
+                  <span className="text-xs text-slate-500 dark:text-slate-400">
+                    Responsável: {paymentModalFamily.responsibleName}{" "}
+                    {paymentModalFamily.responsiblePhone && `(${paymentModalFamily.responsiblePhone})`}
+                  </span>
+                </div>
+                <button
+                  onClick={() => setPaymentModalFamily(null)}
+                  className="p-1 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+
+              {/* Resumo Financeiro da Família */}
+              <div className="grid grid-cols-3 gap-2 p-3 rounded-2xl bg-slate-50 dark:bg-slate-900 text-center border border-slate-200/60 dark:border-slate-800">
+                <div>
+                  <span className="text-[10px] text-slate-400 font-medium block">Cota da Família</span>
+                  <span className="text-sm font-bold text-slate-900 dark:text-white">
+                    R$ {paymentModalFamily.familyTotalCost.toFixed(2)}
+                  </span>
+                </div>
+                <div>
+                  <span className="text-[10px] text-slate-400 font-medium block">Total Recebido</span>
+                  <span className="text-sm font-bold text-emerald-600 dark:text-emerald-400">
+                    R$ {paymentModalFamily.familyTotalPaid.toFixed(2)}
+                  </span>
+                </div>
+                <div>
+                  <span className="text-[10px] text-slate-400 font-medium block">Saldo Restante</span>
+                  <span
+                    className={`text-sm font-bold ${
+                      paymentModalFamily.familyPendingAmount === 0
+                        ? "text-emerald-600"
+                        : "text-amber-600 dark:text-amber-400"
+                    }`}
+                  >
+                    R$ {paymentModalFamily.familyPendingAmount.toFixed(2)}
+                  </span>
+                </div>
+              </div>
+
+              {/* Formulário de Novo Pagamento */}
+              {event.canEdit && (
+                <form onSubmit={handleSavePayment} className="space-y-3 pt-2 border-t border-slate-100 dark:border-slate-800">
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-bold text-slate-800 dark:text-slate-200">
+                      Lançar Pagamento (Parcial ou Total)
+                    </span>
+                    {paymentModalFamily.familyPendingAmount > 0 && (
+                      <button
+                        type="button"
+                        onClick={() => setPaymentAmount(String(paymentModalFamily.familyPendingAmount))}
+                        className="text-[11px] text-emerald-600 dark:text-emerald-400 font-semibold hover:underline"
+                      >
+                        Preencher Saldo (R$ {paymentModalFamily.familyPendingAmount.toFixed(2)})
+                      </button>
+                    )}
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <div>
+                      <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                        Valor Pago (R$) *
+                      </label>
+                      <input
+                        type="number"
+                        step="0.01"
+                        min="0.01"
+                        required
+                        placeholder="Ex: 150.00"
+                        value={paymentAmount}
+                        onChange={(e) => setPaymentAmount(e.target.value)}
+                        className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-xs font-semibold text-slate-900 dark:text-white"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                        Forma de Pagamento
+                      </label>
+                      <select
+                        value={paymentMethod}
+                        onChange={(e) => setPaymentMethod(e.target.value)}
+                        className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-xs text-slate-900 dark:text-white"
+                      >
+                        <option value="PIX">Pix</option>
+                        <option value="DINHEIRO">Dinheiro em Espécie</option>
+                        <option value="TRANSFERENCIA">Transferência Bancária (TED/DOC)</option>
+                        <option value="CARTAO">Cartão de Crédito/Débito</option>
+                        <option value="OUTRO">Outro</option>
+                      </select>
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <div>
+                      <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                        Data do Pagamento
+                      </label>
+                      <input
+                        type="date"
+                        value={paymentDate}
+                        onChange={(e) => setPaymentDate(e.target.value)}
+                        className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-xs text-slate-900 dark:text-white"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                        Observação / Comprovante
+                      </label>
+                      <input
+                        type="text"
+                        placeholder="Ex: Comprovante enviado no WhatsApp"
+                        value={paymentNote}
+                        onChange={(e) => setPaymentNote(e.target.value)}
+                        className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-xs text-slate-900 dark:text-white"
+                      />
+                    </div>
+                  </div>
+
+                  <button
+                    type="submit"
+                    disabled={paymentSubmitting}
+                    className="w-full py-2.5 px-4 rounded-xl bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white font-semibold text-xs flex items-center justify-center gap-1.5 shadow-sm transition-all"
+                  >
+                    <Plus className="w-4 h-4" />
+                    <span>{paymentSubmitting ? "Registrando..." : "Confirmar Lançamento de Pagamento"}</span>
+                  </button>
+                </form>
+              )}
+
+              {/* Histórico de Lançamentos */}
+              <div className="space-y-2 pt-3 border-t border-slate-100 dark:border-slate-800">
+                <div className="flex items-center gap-1.5">
+                  <History className="w-4 h-4 text-slate-400" />
+                  <span className="text-xs font-bold text-slate-800 dark:text-slate-200">
+                    Histórico de Pagamentos ({paymentModalFamily.payments?.length || 0})
+                  </span>
+                </div>
+
+                {(!paymentModalFamily.payments || paymentModalFamily.payments.length === 0) ? (
+                  <div className="text-center py-4 text-xs text-slate-400 bg-slate-50 dark:bg-slate-900/40 rounded-xl">
+                    Nenhum pagamento registrado ainda para esta família.
+                  </div>
+                ) : (
+                  <div className="space-y-1.5 max-h-48 overflow-y-auto pr-1">
+                    {paymentModalFamily.payments.map((payment) => (
+                      <div
+                        key={payment.id}
+                        className="flex items-center justify-between p-2.5 rounded-xl bg-slate-50 dark:bg-slate-900/60 border border-slate-100 dark:border-slate-800 text-xs"
+                      >
+                        <div className="space-y-0.5">
+                          <div className="flex items-center gap-2">
+                            <span className="font-bold text-emerald-600 dark:text-emerald-400">
+                              R$ {payment.amount.toFixed(2)}
+                            </span>
+                            <span className="px-1.5 py-0.5 rounded bg-slate-200 dark:bg-slate-800 text-[10px] font-semibold text-slate-600 dark:text-slate-300">
+                              {payment.method}
+                            </span>
+                            <span className="text-[11px] text-slate-400">
+                              {new Date(payment.paidAt).toLocaleDateString("pt-BR")}
+                            </span>
+                          </div>
+                          {payment.note && (
+                            <span className="text-[11px] text-slate-500 block">
+                              Obs: {payment.note}
+                            </span>
+                          )}
+                        </div>
+
+                        {event.canEdit && (
+                          <button
+                            onClick={() => handleDeletePaymentRecord(payment.id)}
+                            title="Estornar / Excluir pagamento"
+                            className="p-1.5 text-slate-400 hover:text-rose-500 rounded-lg transition-colors"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              <div className="flex justify-end pt-2">
+                <button
+                  onClick={() => setPaymentModalFamily(null)}
+                  className="px-4 py-2 rounded-xl text-xs font-semibold bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300"
+                >
+                  Concluir
+                </button>
+              </div>
             </div>
           </div>
         )}

@@ -187,7 +187,7 @@ export const swaggerSpec = {
                   familyName: { type: "string" },
                   responsibleName: { type: "string" },
                   responsiblePhone: { type: "string" },
-                  paymentStatus: { type: "string", enum: ["PENDING", "PAID"] },
+                  paymentStatus: { type: "string", enum: ["PENDING", "PARTIAL", "PAID"] },
                   members: {
                     type: "array",
                     items: {

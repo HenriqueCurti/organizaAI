@@ -18,6 +18,7 @@ import {
   ShieldCheck,
   Lock,
   Sparkles,
+  Send,
 } from "lucide-react";
 
 interface PublicEvent {
@@ -34,6 +35,7 @@ interface PublicEvent {
   pixKey: string | null;
   pixKeyType: string | null;
   pixReceiverName: string | null;
+  organizerPhone: string | null;
 }
 
 export default function PublicInvitePage({
@@ -166,7 +168,7 @@ export default function PublicInvitePage({
 
       <main className="flex-1 max-w-2xl mx-auto w-full px-4 sm:px-6 py-8 space-y-6">
         {/* Cabeçalho do Convite */}
-        <div className="bg-white dark:bg-[#0f172a] rounded-3xl border border-slate-200 dark:border-slate-800 p-6 sm:p-8 shadow-sm space-y-4">
+        <div className="bg-white dark:bg-[#0f172a] rounded-3xl border border-slate-200 dark:border-slate-800 p-5 sm:p-8 shadow-sm space-y-4">
           <div className="flex items-center gap-2">
             <span className="px-3 py-1 rounded-full text-xs font-bold bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300">
               Convite Oficial
@@ -219,7 +221,7 @@ export default function PublicInvitePage({
 
         {/* Tela de Sucesso após Envio */}
         {successData ? (
-          <div className="bg-white dark:bg-[#0f172a] rounded-3xl border border-slate-200 dark:border-slate-800 p-8 shadow-sm text-center space-y-6">
+          <div className="bg-white dark:bg-[#0f172a] rounded-3xl border border-slate-200 dark:border-slate-800 p-5 sm:p-8 shadow-sm text-center space-y-6">
             <div className="w-16 h-16 rounded-full bg-emerald-100 dark:bg-emerald-950 text-emerald-600 dark:text-emerald-400 flex items-center justify-center mx-auto">
               <CheckCircle2 className="w-10 h-10" />
             </div>
@@ -293,6 +295,42 @@ export default function PublicInvitePage({
               </div>
             )}
 
+            {/* Seção Clara: Como Informar o Pagamento */}
+            <div className="p-5 rounded-2xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-left space-y-3">
+              <div className="flex items-center gap-2 text-slate-900 dark:text-white font-bold text-xs">
+                <CheckCircle2 className="w-4 h-4 text-emerald-600" />
+                <span>Como informar que o pagamento foi realizado?</span>
+              </div>
+              <p className="text-xs text-slate-600 dark:text-slate-400 leading-relaxed">
+                Você pode realizar o pagamento <strong>integral ou parcial</strong>. Após fazer a transferência Pix no seu aplicativo de banco, envie o comprovante diretamente no WhatsApp do organizador (<strong>{event.creatorName}</strong>) para validação e baixa da sua cota.
+              </p>
+
+              <button
+                type="button"
+                onClick={() => {
+                  const phoneRaw = event.organizerPhone || (event.pixKeyType === "PHONE" ? event.pixKey : null) || "";
+                  const phoneDigits = phoneRaw.replace(/\D/g, "");
+                  const msg = [
+                    `Olá, *${event.creatorName}*! Acabei de confirmar a presença da *${formData.familyName}* no evento *${event.title}*.`,
+                    ``,
+                    `*Cota da Família:* R$ ${successData.estimatedTotal.toFixed(2)}`,
+                    `Segue o comprovante do pagamento Pix. Pode validar e dar baixa para nós? Obrigado!`
+                  ].join("\n");
+
+                  if (phoneDigits) {
+                    window.open(`https://wa.me/55${phoneDigits}?text=${encodeURIComponent(msg)}`, "_blank");
+                  } else {
+                    navigator.clipboard.writeText(msg);
+                    alert("Mensagem copiada para a área de transferência! Envie pelo WhatsApp do organizador junto com seu comprovante.");
+                  }
+                }}
+                className="w-full py-3 px-4 rounded-xl bg-slate-800 hover:bg-slate-900 text-white font-semibold text-xs flex items-center justify-center gap-2 shadow-sm transition-all"
+              >
+                <Send className="w-4 h-4 text-emerald-400" />
+                <span>Enviar Comprovante no WhatsApp do Organizador</span>
+              </button>
+            </div>
+
             <div className="pt-2">
               <Link
                 href="/"
@@ -306,7 +344,7 @@ export default function PublicInvitePage({
           /* Formulário de Confirmação */
           <form
             onSubmit={handleSubmit}
-            className="bg-white dark:bg-[#0f172a] rounded-3xl border border-slate-200 dark:border-slate-800 p-6 sm:p-8 shadow-sm space-y-6"
+            className="bg-white dark:bg-[#0f172a] rounded-3xl border border-slate-200 dark:border-slate-800 p-5 sm:p-8 shadow-sm space-y-6"
           >
             <div>
               <h2 className="text-lg font-bold text-slate-900 dark:text-white">
@@ -421,7 +459,7 @@ export default function PublicInvitePage({
                         className="flex-1 px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-xs text-slate-900 dark:text-white"
                       />
 
-                      <div className="flex items-center gap-2">
+                      <div className="flex items-center gap-2 w-full sm:w-auto">
                         <input
                           type="number"
                           required
@@ -434,7 +472,7 @@ export default function PublicInvitePage({
                             updated[idx].age = e.target.value;
                             setFormData({ ...formData, members: updated });
                           }}
-                          className="w-20 px-2 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-xs text-center text-slate-900 dark:text-white"
+                          className="w-16 px-2 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-xs text-center text-slate-900 dark:text-white"
                         />
 
                         <select
@@ -444,7 +482,7 @@ export default function PublicInvitePage({
                             updated[idx].gender = e.target.value;
                             setFormData({ ...formData, members: updated });
                           }}
-                          className="w-24 px-2 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-xs text-slate-900 dark:text-white"
+                          className="flex-1 sm:w-24 px-2 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-xs text-slate-900 dark:text-white"
                         >
                           <option value="MALE">Homem</option>
                           <option value="FEMALE">Mulher</option>
@@ -452,7 +490,7 @@ export default function PublicInvitePage({
                         </select>
 
                         <span
-                          className={`text-[10px] font-bold px-2 py-1 rounded-md shrink-0 ${
+                          className={`text-[10px] font-bold px-2 py-1.5 rounded-md shrink-0 ${
                             isPaying
                               ? "bg-blue-100 text-blue-800 dark:bg-blue-950 dark:text-blue-300"
                               : "bg-slate-200 text-slate-700 dark:bg-slate-800 dark:text-slate-300"
@@ -465,7 +503,8 @@ export default function PublicInvitePage({
                           <button
                             type="button"
                             onClick={() => handleRemoveMember(idx)}
-                            className="p-1 text-slate-400 hover:text-rose-500 rounded"
+                            className="p-1.5 text-slate-400 hover:text-rose-500 rounded-lg hover:bg-rose-50 dark:hover:bg-rose-950/40 shrink-0"
+                            title="Remover pessoa"
                           >
                             <Trash2 className="w-4 h-4" />
                           </button>
