@@ -38,6 +38,7 @@ model Event {
   minPayingAge             Int           @default(12) // Idade mínima para pagar (padrão 12)
   enableBbq                Boolean       @default(true)
   creationMode             String        @default("DETAILED") // QUICK, DETAILED
+  status                   String        @default("OPEN") // OPEN, CLOSED, COMPLETED
   estimatedAttendees       Int?          // Previsão total de participantes (ex: 50)
   estimatedPayingAttendees Int?          // Previsão de pagantes (ex: 35)
   inviteCode               String        @unique @default(cuid())

@@ -36,3 +36,14 @@ This block is written and re-added by `next dev` — verify at `node_modules/nex
    - Menus e barras de abas devem suportar rolagem horizontal suave (`overflow-x-auto no-scrollbar` com itens `shrink-0`) para que nenhuma aba fique escondida ou truncada em celulares menores.
    - Fontes de inputs devem ser confortáveis (`text-sm` ou `text-base`), evitando que o navegador mobile execute zoom forçado indesejado.
 
+---
+
+# DIRETIVA OBRIGATÓRIA: GESTÃO DE BRANCHES E DEPLOY CONSOLIDADO
+
+> [!IMPORTANT]
+> **Toda e qualquer nova funcionalidade, refatoração ou correção DEVE ser desenvolvida em uma branch separada (feature branch).**
+> - **Nunca desenvolver diretamente na branch `main`.**
+> - A branch `main` é estritamente reservada para o código consolidado, testado e pronto para produção (Vercel).
+> - Padrão de nomenclatura de branches: `feature/nome-da-feature` ou `fix/nome-do-ajuste`.
+> - Somente após finalização completa e validação da feature, a branch será integrada à `main` para deploy.
+

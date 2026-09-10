@@ -17,6 +17,8 @@ import {
   ArrowRight,
   ShieldCheck,
   Lock,
+  Unlock,
+  Clock,
   Sparkles,
   Send,
 } from "lucide-react";
@@ -30,6 +32,9 @@ interface PublicEvent {
   locationName: string | null;
   minPayingAge: number;
   enableBbq: boolean;
+  status: "OPEN" | "CLOSED" | "COMPLETED";
+  isClosed?: boolean;
+  paymentsEnabled?: boolean;
   creatorName: string;
   estimatedCostPerQuota: number;
   pixKey: string | null;
@@ -110,9 +115,9 @@ export default function PublicInvitePage({
 
       const data = await res.json();
       if (res.ok) {
-        // Buscar payload Pix para a família recém cadastrada se o evento tiver chave
+        // Buscar payload Pix para a família recém cadastrada somente se o evento estiver com pagamentos liberados
         let pixInfo = null;
-        if (event?.id) {
+        if (event?.id && event?.paymentsEnabled) {
           const pixRes = await fetch(`/api/eventos/${event.id}/pix?familyId=${data.family.id}`);
           const pixJson = await pixRes.json();
           if (pixJson.pix) pixInfo = pixJson.pix;
@@ -169,10 +174,18 @@ export default function PublicInvitePage({
       <main className="flex-1 max-w-2xl mx-auto w-full px-4 sm:px-6 py-8 space-y-6">
         {/* Cabeçalho do Convite */}
         <div className="bg-white dark:bg-[#0f172a] rounded-3xl border border-slate-200 dark:border-slate-800 p-5 sm:p-8 shadow-sm space-y-4">
-          <div className="flex items-center gap-2">
-            <span className="px-3 py-1 rounded-full text-xs font-bold bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300">
-              Convite Oficial
-            </span>
+          <div className="flex flex-wrap items-center gap-2">
+            {event.isClosed ? (
+              <span className="px-3 py-1 rounded-full text-xs font-bold bg-purple-100 text-purple-800 dark:bg-purple-950 dark:text-purple-300 flex items-center gap-1">
+                <Lock className="w-3.5 h-3.5" />
+                Confirmações Encerradas
+              </span>
+            ) : (
+              <span className="px-3 py-1 rounded-full text-xs font-bold bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300 flex items-center gap-1">
+                <Unlock className="w-3.5 h-3.5" />
+                Confirmações Abertas
+              </span>
+            )}
             <span className="text-xs text-slate-500 dark:text-slate-400">
               Organizado por <strong className="text-slate-700 dark:text-slate-300">{event.creatorName}</strong>
             </span>
@@ -209,11 +222,13 @@ export default function PublicInvitePage({
           <div className="p-4 rounded-2xl bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-100 dark:border-emerald-900/60 flex items-start gap-3">
             <DollarSign className="w-5 h-5 text-emerald-600 dark:text-emerald-400 shrink-0 mt-0.5" />
             <div className="text-xs">
-              <span className="font-bold text-emerald-900 dark:text-emerald-200 block">
-                Cota Estimada: R$ {event.estimatedCostPerQuota.toFixed(2)} por pagante
+              <span className="font-bold text-emerald-900 dark:text-emerald-200 block text-sm">
+                {event.isClosed ? "Cota Final Definitiva:" : "Cota Prevista:"} R$ {event.estimatedCostPerQuota.toFixed(2)} por pagante
               </span>
-              <span className="text-emerald-700 dark:text-emerald-300/80">
-                Pessoas com <strong>{event.minPayingAge} anos ou mais</strong> entram no rateio dos custos. Menores de {event.minPayingAge} anos são isentos!
+              <span className="text-emerald-700 dark:text-emerald-300/80 leading-relaxed block mt-0.5">
+                {event.isClosed
+                  ? `As confirmações foram encerradas e a cota foi fixada em R$ ${event.estimatedCostPerQuota.toFixed(2)} (${event.minPayingAge}+ anos pagam).`
+                  : `Valor estimado para o rateio. Pessoas com ${event.minPayingAge} anos ou mais entram no rateio (crianças são isentas). O valor final exato e a chave Pix serão liberados assim que o organizador fechar a lista!`}
               </span>
             </div>
           </div>
@@ -249,8 +264,8 @@ export default function PublicInvitePage({
               </div>
             </div>
 
-            {/* Dados do Pix se disponíveis */}
-            {successData.pix && (
+            {/* Dados do Pix somente se liberados (Evento Fechado) */}
+            {event.paymentsEnabled && successData.pix ? (
               <div className="p-6 rounded-2xl bg-emerald-50/50 dark:bg-emerald-950/20 border border-emerald-100 dark:border-emerald-900/40 space-y-4">
                 <div className="flex items-center justify-center gap-2 text-emerald-800 dark:text-emerald-300 font-bold text-sm">
                   <Sparkles className="w-4 h-4" />
@@ -293,43 +308,55 @@ export default function PublicInvitePage({
                   Favorecido: <strong>{successData.pix.receiverName}</strong> ({event.pixKeyType}: {event.pixKey})
                 </p>
               </div>
+            ) : (
+              <div className="p-5 sm:p-6 rounded-2xl bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800/60 text-center space-y-2">
+                <div className="flex items-center justify-center gap-2 text-amber-800 dark:text-amber-300 font-bold text-sm">
+                  <Clock className="w-4 h-4" />
+                  <span>Cobrança Pix em Espera</span>
+                </div>
+                <p className="text-xs text-amber-700 dark:text-amber-300/90 leading-relaxed max-w-md mx-auto">
+                  As confirmações de presença ainda estão abertas. Assim que o organizador fechar a lista oficial de participantes, o valor final da cota será fechado e as instruções com QR Code Pix serão liberadas!
+                </p>
+              </div>
             )}
 
-            {/* Seção Clara: Como Informar o Pagamento */}
-            <div className="p-5 rounded-2xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-left space-y-3">
-              <div className="flex items-center gap-2 text-slate-900 dark:text-white font-bold text-xs">
-                <CheckCircle2 className="w-4 h-4 text-emerald-600" />
-                <span>Como informar que o pagamento foi realizado?</span>
+            {/* Seção Clara: Como Informar o Pagamento (apenas se pagamentos estiverem liberados) */}
+            {event.paymentsEnabled && (
+              <div className="p-5 rounded-2xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-left space-y-3">
+                <div className="flex items-center gap-2 text-slate-900 dark:text-white font-bold text-xs">
+                  <CheckCircle2 className="w-4 h-4 text-emerald-600" />
+                  <span>Como informar que o pagamento foi realizado?</span>
+                </div>
+                <p className="text-xs text-slate-600 dark:text-slate-400 leading-relaxed">
+                  Você pode realizar o pagamento <strong>integral ou parcial</strong>. Após fazer a transferência Pix no seu aplicativo de banco, envie o comprovante diretamente no WhatsApp do organizador (<strong>{event.creatorName}</strong>) para validação e baixa da sua cota.
+                </p>
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    const phoneRaw = event.organizerPhone || (event.pixKeyType === "PHONE" ? event.pixKey : null) || "";
+                    const phoneDigits = phoneRaw.replace(/\D/g, "");
+                    const msg = [
+                      `Olá, *${event.creatorName}*! Acabei de confirmar a presença da *${formData.familyName}* no evento *${event.title}*.`,
+                      ``,
+                      `*Cota da Família:* R$ ${successData.estimatedTotal.toFixed(2)}`,
+                      `Segue o comprovante do pagamento Pix. Pode validar e dar baixa para nós? Obrigado!`
+                    ].join("\n");
+
+                    if (phoneDigits) {
+                      window.open(`https://wa.me/55${phoneDigits}?text=${encodeURIComponent(msg)}`, "_blank");
+                    } else {
+                      navigator.clipboard.writeText(msg);
+                      alert("Mensagem copiada para a área de transferência! Envie pelo WhatsApp do organizador junto com seu comprovante.");
+                    }
+                  }}
+                  className="w-full py-3 px-4 rounded-xl bg-slate-800 hover:bg-slate-900 text-white font-semibold text-xs flex items-center justify-center gap-2 shadow-sm transition-all"
+                >
+                  <Send className="w-4 h-4 text-emerald-400" />
+                  <span>Enviar Comprovante no WhatsApp do Organizador</span>
+                </button>
               </div>
-              <p className="text-xs text-slate-600 dark:text-slate-400 leading-relaxed">
-                Você pode realizar o pagamento <strong>integral ou parcial</strong>. Após fazer a transferência Pix no seu aplicativo de banco, envie o comprovante diretamente no WhatsApp do organizador (<strong>{event.creatorName}</strong>) para validação e baixa da sua cota.
-              </p>
-
-              <button
-                type="button"
-                onClick={() => {
-                  const phoneRaw = event.organizerPhone || (event.pixKeyType === "PHONE" ? event.pixKey : null) || "";
-                  const phoneDigits = phoneRaw.replace(/\D/g, "");
-                  const msg = [
-                    `Olá, *${event.creatorName}*! Acabei de confirmar a presença da *${formData.familyName}* no evento *${event.title}*.`,
-                    ``,
-                    `*Cota da Família:* R$ ${successData.estimatedTotal.toFixed(2)}`,
-                    `Segue o comprovante do pagamento Pix. Pode validar e dar baixa para nós? Obrigado!`
-                  ].join("\n");
-
-                  if (phoneDigits) {
-                    window.open(`https://wa.me/55${phoneDigits}?text=${encodeURIComponent(msg)}`, "_blank");
-                  } else {
-                    navigator.clipboard.writeText(msg);
-                    alert("Mensagem copiada para a área de transferência! Envie pelo WhatsApp do organizador junto com seu comprovante.");
-                  }
-                }}
-                className="w-full py-3 px-4 rounded-xl bg-slate-800 hover:bg-slate-900 text-white font-semibold text-xs flex items-center justify-center gap-2 shadow-sm transition-all"
-              >
-                <Send className="w-4 h-4 text-emerald-400" />
-                <span>Enviar Comprovante no WhatsApp do Organizador</span>
-              </button>
-            </div>
+            )}
 
             <div className="pt-2">
               <Link
@@ -339,6 +366,32 @@ export default function PublicInvitePage({
                 Conhecer a plataforma OrganizaAI
               </Link>
             </div>
+          </div>
+        ) : event.isClosed ? (
+          <div className="bg-white dark:bg-[#0f172a] rounded-3xl border border-slate-200 dark:border-slate-800 p-8 text-center space-y-4">
+            <div className="w-14 h-14 rounded-full bg-purple-100 dark:bg-purple-950/60 text-purple-600 dark:text-purple-400 flex items-center justify-center mx-auto">
+              <Lock className="w-7 h-7" />
+            </div>
+            <div>
+              <h2 className="text-xl font-bold text-slate-900 dark:text-white">
+                Confirmações Encerradas
+              </h2>
+              <p className="text-xs text-slate-500 dark:text-slate-400 mt-1.5 max-w-md mx-auto leading-relaxed">
+                A lista de participantes para este evento foi encerrada pelo organizador (<strong>{event.creatorName}</strong>).
+                Caso precise adicionar alguém ou ajustar sua presença, entre em contato diretamente com ele.
+              </p>
+            </div>
+            {event.organizerPhone && (
+              <a
+                href={`https://wa.me/55${event.organizerPhone.replace(/\D/g, "")}?text=${encodeURIComponent(`Olá, ${event.creatorName}! Vi que a lista para o evento ${event.title} fechou, gostaria de falar com você sobre as confirmações.`)}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center justify-center gap-2 px-5 py-3 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold shadow-sm transition-all"
+              >
+                <Send className="w-4 h-4" />
+                Falar com {event.creatorName} no WhatsApp
+              </a>
+            )}
           </div>
         ) : (
           /* Formulário de Confirmação */

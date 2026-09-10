@@ -30,6 +30,8 @@ import {
   History,
   FileText,
   Zap,
+  Lock,
+  Unlock,
 } from "lucide-react";
 
 interface Member {
@@ -94,6 +96,10 @@ interface EventDetail {
   locationName: string | null;
   minPayingAge: number;
   enableBbq: boolean;
+  status: "OPEN" | "CLOSED" | "COMPLETED";
+  isClosed?: boolean;
+  paymentsEnabled?: boolean;
+  isProjectedQuota?: boolean;
   creationMode?: string;
   estimatedAttendees?: number | null;
   estimatedPayingAttendees?: number | null;
@@ -128,6 +134,8 @@ export default function EventDetailPage({
   const [activeTab, setActiveTab] = useState<"rateio" | "custos" | "churrasco" | "pix" | "organizadores">("rateio");
   const [copiedLink, setCopiedLink] = useState(false);
   const [copiedPix, setCopiedPix] = useState(false);
+  const [statusLoading, setStatusLoading] = useState(false);
+  const [copiedCobranca, setCopiedCobranca] = useState(false);
 
   // Modais de Custos
   const [showAddCost, setShowAddCost] = useState(false);
@@ -242,6 +250,62 @@ export default function EventDetailPage({
     navigator.clipboard.writeText(url);
     setCopiedLink(true);
     setTimeout(() => setCopiedLink(false), 2500);
+  };
+
+  const handleToggleEventStatus = async (newStatus: "OPEN" | "CLOSED") => {
+    if (!event) return;
+    const confirmMsg =
+      newStatus === "CLOSED"
+        ? "Deseja fechar as confirmações deste evento?\n\n• O link de convite deixará de aceitar novas confirmações ou alterações.\n• O valor da cota será fixado definitivamente com base nos participantes confirmados.\n• Os pagamentos via Pix serão liberados aos participantes."
+        : "Deseja reabrir as confirmações deste evento?\n\n• O convite voltará a aceitar confirmações.\n• A cota voltará a usar o quórum projetado/estimado.";
+    if (!confirm(confirmMsg)) return;
+
+    try {
+      setStatusLoading(true);
+      const res = await fetch(`/api/eventos/${id}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ status: newStatus }),
+      });
+      const data = await res.json();
+      if (res.ok) {
+        await fetchEvent();
+        await fetchBbq();
+      } else {
+        alert(data.error || "Erro ao alterar status do evento");
+      }
+    } catch (e) {
+      console.error(e);
+      alert("Falha de conexão com o servidor");
+    } finally {
+      setStatusLoading(false);
+    }
+  };
+
+  const handleCopyFinalCobranca = () => {
+    if (!event) return;
+    const payingCount = event.actualPayingParticipants ?? event.totalPayingParticipants;
+    const lines = [
+      `📢 *LISTA FECHADA & RATEIO - ${event.title}*`,
+      ``,
+      `Olá a todos! As confirmações de presença foram encerradas e os valores finais do rateio estão definidos:`,
+      ``,
+      `💰 *Cota por Pagante:* R$ ${event.costPerQuota.toFixed(2)}`,
+      `👥 *Total de Pagantes Confirmados:* ${payingCount}`,
+      `🏷️ *Custo Total do Evento:* R$ ${event.totalCosts.toFixed(2)}`,
+      ``,
+      event.pixKey ? `🔑 *Chave Pix (${event.pixKeyType || "Pix"}):* ${event.pixKey}` : null,
+      event.pixReceiverName ? `👤 *Titular da Conta:* ${event.pixReceiverName}` : null,
+      ``,
+      `Para conferir sua cota individual de família e pagar via QR Code / Copia e Cola, acesse seu convite:`,
+      `${window.location.origin}/convite/${event.inviteCode}`,
+      ``,
+      `Por favor, realizem o pagamento e enviem o comprovante para a organização. Obrigado!`
+    ].filter((line) => line !== null);
+
+    navigator.clipboard.writeText(lines.join("\n"));
+    setCopiedCobranca(true);
+    setTimeout(() => setCopiedCobranca(false), 2500);
   };
 
   // --- CUSTOS ---
@@ -648,7 +712,7 @@ export default function EventDetailPage({
       <Navbar />
 
       <main className="flex-1 max-w-7xl mx-auto w-full px-4 sm:px-6 lg:px-8 py-8 space-y-8">
-        {/* Top Breadcrumb & Share Link */}
+        {/* Top Breadcrumb & Actions */}
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 sm:gap-4">
           <Link
             href="/dashboard"
@@ -658,22 +722,67 @@ export default function EventDetailPage({
             Voltar para Meus Eventos
           </Link>
 
-          <button
-            onClick={handleCopyInvite}
-            className="inline-flex items-center justify-center gap-2 px-4 py-2.5 sm:py-2 rounded-xl text-xs font-semibold bg-emerald-600 hover:bg-emerald-700 text-white shadow-md shadow-emerald-600/20 transition-all w-full sm:w-auto"
-          >
-            {copiedLink ? (
-              <>
-                <Check className="w-4 h-4" />
-                <span>Link Copiado para WhatsApp!</span>
-              </>
+          <div className="flex flex-wrap sm:flex-nowrap items-center gap-2 w-full sm:w-auto">
+            {event.status === "CLOSED" ? (
+              <button
+                onClick={handleCopyFinalCobranca}
+                className="inline-flex items-center justify-center gap-2 px-4 py-2.5 sm:py-2 rounded-xl text-xs font-semibold bg-purple-600 hover:bg-purple-700 text-white shadow-md shadow-purple-600/20 transition-all flex-1 sm:flex-initial"
+              >
+                {copiedCobranca ? (
+                  <>
+                    <Check className="w-4 h-4" />
+                    <span>Cobrança Copiada!</span>
+                  </>
+                ) : (
+                  <>
+                    <Send className="w-4 h-4 text-purple-200" />
+                    <span>Copiar Cobrança WhatsApp</span>
+                  </>
+                )}
+              </button>
             ) : (
-              <>
-                <Share2 className="w-4 h-4" />
-                <span>Copiar Link de Convite para Famílias</span>
-              </>
+              <button
+                onClick={handleCopyInvite}
+                className="inline-flex items-center justify-center gap-2 px-4 py-2.5 sm:py-2 rounded-xl text-xs font-semibold bg-emerald-600 hover:bg-emerald-700 text-white shadow-md shadow-emerald-600/20 transition-all flex-1 sm:flex-initial"
+              >
+                {copiedLink ? (
+                  <>
+                    <Check className="w-4 h-4" />
+                    <span>Link Copiado para WhatsApp!</span>
+                  </>
+                ) : (
+                  <>
+                    <Share2 className="w-4 h-4" />
+                    <span>Copiar Convite (WhatsApp)</span>
+                  </>
+                )}
+              </button>
             )}
-          </button>
+
+            {event.canEdit && (
+              event.status === "CLOSED" ? (
+                <button
+                  onClick={() => handleToggleEventStatus("OPEN")}
+                  disabled={statusLoading}
+                  className="inline-flex items-center justify-center gap-1.5 px-3.5 py-2.5 sm:py-2 rounded-xl text-xs font-semibold bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-700 hover:bg-slate-50 transition-all disabled:opacity-50"
+                  title="Reabrir confirmações de participantes"
+                >
+                  <Unlock className="w-3.5 h-3.5 text-slate-500" />
+                  <span>Reabrir</span>
+                </button>
+              ) : (
+                <button
+                  onClick={() => handleToggleEventStatus("CLOSED")}
+                  disabled={statusLoading}
+                  className="inline-flex items-center justify-center gap-1.5 px-3.5 py-2.5 sm:py-2 rounded-xl text-xs font-semibold bg-slate-900 hover:bg-black dark:bg-slate-100 dark:hover:bg-white text-white dark:text-slate-900 shadow-sm transition-all disabled:opacity-50"
+                  title="Encerrar confirmações e iniciar cobrança Pix"
+                >
+                  <Lock className="w-3.5 h-3.5" />
+                  <span>Fechar Lista</span>
+                </button>
+              )
+            )}
+          </div>
         </div>
 
         {/* Hero Card do Evento */}
@@ -681,6 +790,19 @@ export default function EventDetailPage({
           <div className="flex flex-col md:flex-row md:items-start justify-between gap-6">
             <div className="space-y-2.5">
               <div className="flex flex-wrap items-center gap-2">
+                {/* Badge de Status do Evento */}
+                {event.status === "CLOSED" ? (
+                  <span className="px-2.5 py-0.5 rounded-full text-xs font-bold bg-purple-100 text-purple-800 dark:bg-purple-950 dark:text-purple-300 inline-flex items-center gap-1">
+                    <Lock className="w-3 h-3" />
+                    Lista Fechada & Cobrança Ativa
+                  </span>
+                ) : (
+                  <span className="px-2.5 py-0.5 rounded-full text-xs font-bold bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300 inline-flex items-center gap-1">
+                    <Clock className="w-3 h-3" />
+                    Confirmações Abertas
+                  </span>
+                )}
+
                 <span className="px-2.5 py-0.5 rounded-full text-xs font-bold bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300">
                   Idade de corte: {event.minPayingAge}+ anos pagam
                 </span>
@@ -756,13 +878,19 @@ export default function EventDetailPage({
 
             <div className="p-3 sm:p-4 rounded-2xl bg-emerald-50 dark:bg-emerald-950/30 border border-emerald-100 dark:border-emerald-900/40">
               <span className="text-[11px] sm:text-xs text-emerald-800 dark:text-emerald-400 block font-semibold">
-                Cota por Pagante
+                {event.status === "CLOSED" ? "Cota Final Definitiva" : "Cota por Pagante (Prevista)"}
               </span>
               <span className="text-base sm:text-xl font-bold text-emerald-700 dark:text-emerald-300 mt-1 block">
                 R$ {event.costPerQuota.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}
               </span>
               <span className="text-[10px] sm:text-[11px] text-emerald-600/80 dark:text-emerald-400/80">
-                {event.isEstimatedRateio ? "Estimativa prevista" : `${event.minPayingAge}+ anos pagam`}
+                {event.status === "CLOSED"
+                  ? `${event.actualPayingParticipants ?? event.totalPayingParticipants} pagantes confirmados`
+                  : event.isProjectedQuota
+                  ? "Cálculo pelo quórum estimado"
+                  : event.isEstimatedRateio
+                  ? "Estimativa prevista"
+                  : `${event.minPayingAge}+ anos pagam`}
               </span>
             </div>
 
@@ -774,7 +902,9 @@ export default function EventDetailPage({
                 {event.totalPayingParticipants + event.totalExemptParticipants} pessoas
               </span>
               <span className="text-[10px] sm:text-[11px] text-slate-400">
-                {event.isEstimatedRateio
+                {event.status === "CLOSED"
+                  ? `${event.actualPayingParticipants ?? event.totalPayingParticipants} pagantes | ${event.actualExemptParticipants ?? event.totalExemptParticipants} isentos`
+                  : event.isEstimatedRateio
                   ? `${event.totalPayingParticipants} pagantes previstos`
                   : `${event.totalPayingParticipants} pagantes | ${event.totalExemptParticipants} isentos`}
               </span>
@@ -793,6 +923,98 @@ export default function EventDetailPage({
             </div>
           </div>
         </div>
+
+        {/* Banner de Status & Ciclo de Vida do Evento */}
+        {event.status === "CLOSED" ? (
+          <div className="p-4 sm:p-5 rounded-2xl bg-gradient-to-r from-purple-50 via-indigo-50 to-emerald-50 dark:from-purple-950/40 dark:via-indigo-950/30 dark:to-emerald-950/30 border border-purple-200 dark:border-purple-800/60 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+            <div className="flex items-start gap-3">
+              <div className="p-2.5 rounded-xl bg-purple-500/10 text-purple-600 dark:text-purple-400 shrink-0 mt-0.5">
+                <Lock className="w-5 h-5" />
+              </div>
+              <div>
+                <h4 className="text-xs sm:text-sm font-bold text-slate-900 dark:text-white flex flex-wrap items-center gap-2">
+                  <span>Lista Fechada & Cobrança Pix Liberada</span>
+                  <span className="text-[10px] bg-purple-100 dark:bg-purple-900/60 text-purple-800 dark:text-purple-300 px-2 py-0.5 rounded-full font-bold">
+                    Cota Final: R$ {event.costPerQuota.toFixed(2)}
+                  </span>
+                </h4>
+                <p className="text-xs text-slate-600 dark:text-slate-400 mt-1 leading-relaxed">
+                  As confirmações pelo convite estão encerradas. O valor da cota foi finalizado com base nos pagantes confirmados e os pagamentos Pix estão liberados aos participantes.
+                </p>
+              </div>
+            </div>
+
+            <div className="flex flex-wrap items-center gap-2 shrink-0">
+              <button
+                onClick={handleCopyFinalCobranca}
+                className="inline-flex items-center gap-1.5 px-3.5 py-2.5 rounded-xl bg-purple-600 hover:bg-purple-700 text-white text-xs font-semibold shadow-sm transition-all w-full sm:w-auto justify-center"
+              >
+                {copiedCobranca ? (
+                  <>
+                    <Check className="w-4 h-4" />
+                    <span>Cobrança Copiada!</span>
+                  </>
+                ) : (
+                  <>
+                    <Send className="w-4 h-4 text-purple-200" />
+                    <span>Copiar Cobrança (WhatsApp)</span>
+                  </>
+                )}
+              </button>
+
+              {event.canEdit && (
+                <button
+                  onClick={() => handleToggleEventStatus("OPEN")}
+                  disabled={statusLoading}
+                  className="inline-flex items-center gap-1.5 px-3.5 py-2.5 rounded-xl bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-700 text-xs font-semibold hover:bg-slate-50 transition-all w-full sm:w-auto justify-center disabled:opacity-50"
+                >
+                  <Unlock className="w-3.5 h-3.5 text-slate-500" />
+                  <span>Reabrir Confirmações</span>
+                </button>
+              )}
+            </div>
+          </div>
+        ) : (
+          <div className="p-4 sm:p-5 rounded-2xl bg-gradient-to-r from-amber-50 to-orange-50 dark:from-amber-950/30 dark:to-orange-950/20 border border-amber-200/80 dark:border-amber-800/60 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+            <div className="flex items-start gap-3">
+              <div className="p-2.5 rounded-xl bg-amber-500/10 text-amber-600 dark:text-amber-400 shrink-0 mt-0.5">
+                <Clock className="w-5 h-5" />
+              </div>
+              <div>
+                <h4 className="text-xs sm:text-sm font-bold text-slate-900 dark:text-white flex flex-wrap items-center gap-2">
+                  <span>Confirmações em Aberto (Cobrança em Espera)</span>
+                  <span className="text-[10px] bg-amber-100 dark:bg-amber-900/60 text-amber-800 dark:text-amber-300 px-2 py-0.5 rounded-full font-bold">
+                    Cota Prevista: R$ {event.costPerQuota.toFixed(2)}
+                  </span>
+                </h4>
+                <p className="text-xs text-slate-600 dark:text-slate-400 mt-1 leading-relaxed">
+                  Os convidados podem confirmar presença pelo convite. A cobrança Pix só iniciará após o fechamento da lista, garantindo que o rateio seja justo e exato para todos.
+                </p>
+              </div>
+            </div>
+
+            <div className="flex flex-wrap items-center gap-2 shrink-0">
+              <button
+                onClick={handleCopyInvite}
+                className="inline-flex items-center gap-1.5 px-3.5 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold shadow-sm transition-all w-full sm:w-auto justify-center"
+              >
+                <Share2 className="w-3.5 h-3.5" />
+                <span>Enviar Convite</span>
+              </button>
+
+              {event.canEdit && (
+                <button
+                  onClick={() => handleToggleEventStatus("CLOSED")}
+                  disabled={statusLoading}
+                  className="inline-flex items-center gap-1.5 px-3.5 py-2.5 rounded-xl bg-slate-900 hover:bg-black dark:bg-slate-100 dark:hover:bg-white text-white dark:text-slate-900 text-xs font-semibold shadow-sm transition-all w-full sm:w-auto justify-center disabled:opacity-50"
+                >
+                  <Lock className="w-3.5 h-3.5" />
+                  <span>Fechar Lista & Liberar Pix</span>
+                </button>
+              )}
+            </div>
+          </div>
+        )}
 
         {/* Abas de Navegação */}
         <div className="flex items-center gap-1.5 sm:gap-2 border-b border-slate-200 dark:border-slate-800 overflow-x-auto pb-1 no-scrollbar touch-scroll">
@@ -1573,6 +1795,28 @@ export default function EventDetailPage({
                   Chave cadastrada pelo organizador para receber os valores de rateio diretamente na conta.
                 </p>
               </div>
+
+              {!event.paymentsEnabled ? (
+                <div className="p-4 rounded-2xl bg-amber-50 dark:bg-amber-950/40 border border-amber-200/80 dark:border-amber-800/60 text-amber-800 dark:text-amber-300 text-xs flex items-start gap-2.5 text-left">
+                  <Clock className="w-4 h-4 shrink-0 mt-0.5 text-amber-600 dark:text-amber-400" />
+                  <div className="space-y-1">
+                    <span className="font-bold block">Recebimento Pix em Espera:</span>
+                    <p className="leading-relaxed">
+                      As confirmações ainda estão abertas. Os QR Codes e pagamentos Pix só serão liberados aos participantes quando a lista for fechada. Isso garante que ninguém pague adiantado por uma cota sujeita a variações de quórum.
+                    </p>
+                  </div>
+                </div>
+              ) : (
+                <div className="p-4 rounded-2xl bg-purple-50 dark:bg-purple-950/40 border border-purple-200/80 dark:border-purple-800/60 text-purple-800 dark:text-purple-300 text-xs flex items-start gap-2.5 text-left">
+                  <Lock className="w-4 h-4 shrink-0 mt-0.5 text-purple-600 dark:text-purple-400" />
+                  <div className="space-y-1">
+                    <span className="font-bold block">Recebimento Pix Liberado:</span>
+                    <p className="leading-relaxed">
+                      A lista foi fechada e a cota definitiva foi calculada. Os participantes já conseguem visualizar o QR Code Pix e a chave Copia e Cola ao acessar a página de confirmação.
+                    </p>
+                  </div>
+                </div>
+              )}
 
               {event.pixKey ? (
                 <div className="p-4 rounded-2xl bg-slate-50 dark:bg-slate-900/80 border border-slate-200 dark:border-slate-800 text-left space-y-3">
@@ -2369,6 +2613,15 @@ export default function EventDetailPage({
                   </span>
                 </div>
               </div>
+
+              {!event.paymentsEnabled && (
+                <div className="p-3 bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800 rounded-xl text-amber-800 dark:text-amber-300 text-[11px] text-left flex items-start gap-2">
+                  <Clock className="w-4 h-4 shrink-0 mt-0.5 text-amber-600 dark:text-amber-400" />
+                  <span>
+                    <strong>Confirmações em aberto:</strong> Este evento ainda não foi fechado. Os participantes não visualizam o QR Code no convite até que a lista seja finalizada pelo organizador.
+                  </span>
+                </div>
+              )}
 
               {pixModalData.isFullyPaid && pixModalData.amount === 0 ? (
                 <div className="p-4 rounded-2xl bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800 text-emerald-800 dark:text-emerald-300 space-y-2">

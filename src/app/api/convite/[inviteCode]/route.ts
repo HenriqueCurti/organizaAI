@@ -38,6 +38,9 @@ export async function GET(
       locationName: true,
       minPayingAge: true,
       enableBbq: true,
+      status: true,
+      estimatedPayingAttendees: true,
+      estimatedAttendees: true,
       pixKey: true,
       pixKeyType: true,
       pixReceiverName: true,
@@ -78,8 +81,13 @@ export async function GET(
     });
   });
 
+  const isClosed = event.status === "CLOSED";
+  const effectiveDivisor = isClosed
+    ? (totalPayingParticipants > 0 ? totalPayingParticipants : (event.estimatedPayingAttendees || 1))
+    : Math.max(totalPayingParticipants, event.estimatedPayingAttendees || 1);
+
   const estimatedCostPerQuota =
-    totalPayingParticipants > 0 ? totalCosts / totalPayingParticipants : 0;
+    effectiveDivisor > 0 ? totalCosts / effectiveDivisor : 0;
 
   return NextResponse.json({
     event: {
@@ -91,8 +99,12 @@ export async function GET(
       locationName: event.locationName,
       minPayingAge: event.minPayingAge,
       enableBbq: event.enableBbq,
+      status: event.status || "OPEN",
+      isClosed,
+      paymentsEnabled: isClosed,
       creatorName: event.creator.name,
       estimatedCostPerQuota: Number(estimatedCostPerQuota.toFixed(2)),
+      totalPayingParticipants,
       pixKey: event.pixKey,
       pixKeyType: event.pixKeyType,
       pixReceiverName: event.pixReceiverName,
@@ -113,6 +125,13 @@ export async function POST(
 
   if (!event) {
     return NextResponse.json({ error: "Evento não encontrado" }, { status: 404 });
+  }
+
+  if (event.status === "CLOSED") {
+    return NextResponse.json(
+      { error: "As confirmações para este evento foram encerradas pelo organizador." },
+      { status: 400 }
+    );
   }
 
   try {

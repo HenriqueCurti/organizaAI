@@ -15,6 +15,7 @@ const updateEventSchema = z.object({
   minPayingAge: z.coerce.number().min(0).optional(),
   enableBbq: z.boolean().optional(),
   creationMode: z.enum(["QUICK", "DETAILED"]).optional(),
+  status: z.enum(["OPEN", "CLOSED", "COMPLETED"]).optional(),
   estimatedAttendees: z.coerce.number().min(1).optional().nullable(),
   estimatedPayingAttendees: z.coerce.number().min(0).optional().nullable(),
 });
@@ -78,20 +79,29 @@ export async function GET(
     });
   });
 
-  const isEstimatedRateio =
-    actualPayingParticipants === 0 && Boolean(event.estimatedPayingAttendees && event.estimatedPayingAttendees > 0);
+  const isClosed = event.status === "CLOSED";
+  const paymentsEnabled = isClosed;
 
-  const effectivePayingParticipants = isEstimatedRateio
-    ? (event.estimatedPayingAttendees || 0)
-    : actualPayingParticipants;
+  // Se o evento está ABERTO:
+  // Divisor projetado = Math.max(actualPayingParticipants, event.estimatedPayingAttendees || 1)
+  // Se o evento está FECHADO:
+  // Divisor definitivo = actualPayingParticipants > 0 ? actualPayingParticipants : (event.estimatedPayingAttendees || 1)
+  const effectiveDivisor = isClosed
+    ? (actualPayingParticipants > 0 ? actualPayingParticipants : (event.estimatedPayingAttendees || 1))
+    : Math.max(actualPayingParticipants, event.estimatedPayingAttendees || 1);
 
-  const effectiveTotalParticipants = isEstimatedRateio
-    ? (event.estimatedAttendees || event.estimatedPayingAttendees || 0)
-    : (actualPayingParticipants + actualExemptParticipants);
+  const isProjectedQuota = !isClosed;
+  const isEstimatedRateio = actualPayingParticipants === 0;
 
-  const effectiveExemptParticipants = isEstimatedRateio
-    ? Math.max(0, effectiveTotalParticipants - effectivePayingParticipants)
-    : actualExemptParticipants;
+  const effectivePayingParticipants = effectiveDivisor;
+
+  const effectiveTotalParticipants = isClosed
+    ? (actualPayingParticipants + actualExemptParticipants)
+    : Math.max(actualPayingParticipants + actualExemptParticipants, event.estimatedAttendees || effectiveDivisor);
+
+  const effectiveExemptParticipants = isClosed
+    ? actualExemptParticipants
+    : Math.max(0, effectiveTotalParticipants - effectivePayingParticipants);
 
   const costPerQuota =
     effectivePayingParticipants > 0 ? totalCosts / effectivePayingParticipants : 0;
@@ -145,6 +155,10 @@ export async function GET(
   return NextResponse.json({
     event: {
       ...event,
+      status: event.status || "OPEN",
+      isClosed,
+      paymentsEnabled,
+      isProjectedQuota,
       isOwner,
       canEdit,
       totalCosts,

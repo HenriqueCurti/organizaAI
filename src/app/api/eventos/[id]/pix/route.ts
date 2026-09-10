@@ -41,7 +41,12 @@ export async function GET(
     });
   });
 
-  const costPerQuota = totalPayingParticipants > 0 ? totalCosts / totalPayingParticipants : 0;
+  const isClosed = event.status === "CLOSED";
+  const effectiveDivisor = isClosed
+    ? (totalPayingParticipants > 0 ? totalPayingParticipants : (event.estimatedPayingAttendees || 1))
+    : Math.max(totalPayingParticipants, event.estimatedPayingAttendees || 1);
+
+  const costPerQuota = effectiveDivisor > 0 ? totalCosts / effectiveDivisor : 0;
 
   let amountToPay = costPerQuota;
   let familyTotalCost = costPerQuota;
@@ -98,6 +103,9 @@ export async function GET(
       totalPaid: Number(familyTotalPaid.toFixed(2)),
       pendingAmount: Number(pendingAmount.toFixed(2)),
       isFullyPaid,
+      paymentsEnabled: isClosed,
+      isClosed,
+      status: event.status || "OPEN",
       payload,
       qrCode,
     },
