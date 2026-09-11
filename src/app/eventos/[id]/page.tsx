@@ -1481,8 +1481,13 @@ export default function EventDetailPage({
                         {event.canEdit ? (
                           <button
                             onClick={() => handleOpenPaymentModal(family)}
-                            className="inline-flex items-center gap-1.5 px-3 py-2 sm:py-1.5 rounded-xl text-xs font-semibold bg-emerald-50 hover:bg-emerald-100 dark:bg-emerald-950/60 dark:hover:bg-emerald-900/60 text-emerald-700 dark:text-emerald-300 transition-colors"
-                            title="Lançar pagamento ou ver histórico"
+                            disabled={event.status !== "CLOSED"}
+                            className="inline-flex items-center gap-1.5 px-3 py-2 sm:py-1.5 rounded-xl text-xs font-semibold bg-emerald-50 hover:bg-emerald-100 dark:bg-emerald-950/60 dark:hover:bg-emerald-900/60 text-emerald-700 dark:text-emerald-300 transition-colors disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-emerald-50 dark:disabled:hover:bg-emerald-950/60"
+                            title={
+                              event.status !== "CLOSED"
+                                ? "Libere o evento (fechar lista) para lançar pagamentos"
+                                : "Lançar pagamento ou ver histórico"
+                            }
                           >
                             <DollarSign className="w-3.5 h-3.5" />
                             <span>Registrar Pagamento</span>
@@ -1495,9 +1500,12 @@ export default function EventDetailPage({
                           {event.pixKey && (
                             <button
                               onClick={() => handleOpenFamilyPix(family)}
-                              className="inline-flex items-center gap-1 px-3 py-2 sm:py-1.5 rounded-xl text-xs font-semibold bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 transition-colors"
+                              disabled={event.status !== "CLOSED"}
+                              className="inline-flex items-center gap-1 px-3 py-2 sm:py-1.5 rounded-xl text-xs font-semibold bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 transition-colors disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-slate-100 dark:disabled:hover:bg-slate-800"
                               title={
-                                family.familyPendingAmount > 0
+                                event.status !== "CLOSED"
+                                  ? "A cobrança Pix só é liberada após o fechamento da lista"
+                                  : family.familyPendingAmount > 0
                                   ? `Gerar Pix com saldo pendente de R$ ${family.familyPendingAmount.toFixed(2)}`
                                   : "Ver dados do Pix"
                               }
@@ -3181,95 +3189,105 @@ export default function EventDetailPage({
                 </div>
               </div>
 
-              {/* Formulário de Novo Pagamento */}
+              {/* Formulário de Novo Pagamento ou Aviso de Bloqueio */}
               {event.canEdit && (
-                <form onSubmit={handleSavePayment} className="space-y-3 pt-2 border-t border-slate-100 dark:border-slate-800">
-                  <div className="flex items-center justify-between">
-                    <span className="text-xs font-bold text-slate-800 dark:text-slate-200">
-                      Lançar Pagamento (Parcial ou Total)
-                    </span>
-                    {paymentModalFamily.familyPendingAmount > 0 && (
-                      <button
-                        type="button"
-                        onClick={() => setPaymentAmount(String(paymentModalFamily.familyPendingAmount))}
-                        className="text-[11px] text-emerald-600 dark:text-emerald-400 font-semibold hover:underline"
-                      >
-                        Preencher Saldo (R$ {paymentModalFamily.familyPendingAmount.toFixed(2)})
-                      </button>
-                    )}
-                  </div>
-
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                event.status !== "CLOSED" ? (
+                  <div className="p-3.5 rounded-xl bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800/60 text-xs text-amber-800 dark:text-amber-300 flex items-start gap-2.5">
+                    <Clock className="w-4 h-4 shrink-0 mt-0.5 text-amber-600 dark:text-amber-400" />
                     <div>
-                      <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
-                        Valor Pago (R$) *
-                      </label>
-                      <input
-                        type="number"
-                        step="0.01"
-                        min="0.01"
-                        required
-                        placeholder="Ex: 150.00"
-                        value={paymentAmount}
-                        onChange={(e) => setPaymentAmount(e.target.value)}
-                        className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-xs font-semibold text-slate-900 dark:text-white"
-                      />
-                    </div>
-
-                    <div>
-                      <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
-                        Forma de Pagamento
-                      </label>
-                      <select
-                        value={paymentMethod}
-                        onChange={(e) => setPaymentMethod(e.target.value)}
-                        className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-xs text-slate-900 dark:text-white"
-                      >
-                        <option value="PIX">Pix</option>
-                        <option value="DINHEIRO">Dinheiro em Espécie</option>
-                        <option value="TRANSFERENCIA">Transferência Bancária (TED/DOC)</option>
-                        <option value="CARTAO">Cartão de Crédito/Débito</option>
-                        <option value="OUTRO">Outro</option>
-                      </select>
+                      <span className="font-bold block">Cobrança e pagamentos bloqueados</span>
+                      <span>Os pagamentos só podem ser lançados após o fechamento da lista e liberação do evento.</span>
                     </div>
                   </div>
-
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                    <div>
-                      <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
-                        Data do Pagamento
-                      </label>
-                      <input
-                        type="date"
-                        value={paymentDate}
-                        onChange={(e) => setPaymentDate(e.target.value)}
-                        className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-xs text-slate-900 dark:text-white"
-                      />
+                ) : (
+                  <form onSubmit={handleSavePayment} className="space-y-3 pt-2 border-t border-slate-100 dark:border-slate-800">
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs font-bold text-slate-800 dark:text-slate-200">
+                        Lançar Pagamento (Parcial ou Total)
+                      </span>
+                      {paymentModalFamily.familyPendingAmount > 0 && (
+                        <button
+                          type="button"
+                          onClick={() => setPaymentAmount(String(paymentModalFamily.familyPendingAmount))}
+                          className="text-[11px] text-emerald-600 dark:text-emerald-400 font-semibold hover:underline"
+                        >
+                          Preencher Saldo (R$ {paymentModalFamily.familyPendingAmount.toFixed(2)})
+                        </button>
+                      )}
                     </div>
 
-                    <div>
-                      <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
-                        Observação / Comprovante
-                      </label>
-                      <input
-                        type="text"
-                        placeholder="Ex: Comprovante enviado no WhatsApp"
-                        value={paymentNote}
-                        onChange={(e) => setPaymentNote(e.target.value)}
-                        className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-xs text-slate-900 dark:text-white"
-                      />
-                    </div>
-                  </div>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                      <div>
+                        <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                          Valor Pago (R$) *
+                        </label>
+                        <input
+                          type="number"
+                          step="0.01"
+                          min="0.01"
+                          required
+                          placeholder="Ex: 150.00"
+                          value={paymentAmount}
+                          onChange={(e) => setPaymentAmount(e.target.value)}
+                          className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-xs font-semibold text-slate-900 dark:text-white"
+                        />
+                      </div>
 
-                  <button
-                    type="submit"
-                    disabled={paymentSubmitting}
-                    className="w-full py-2.5 px-4 rounded-xl bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white font-semibold text-xs flex items-center justify-center gap-1.5 shadow-sm transition-all"
-                  >
-                    <Plus className="w-4 h-4" />
-                    <span>{paymentSubmitting ? "Registrando..." : "Confirmar Lançamento de Pagamento"}</span>
-                  </button>
-                </form>
+                      <div>
+                        <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                          Forma de Pagamento
+                        </label>
+                        <select
+                          value={paymentMethod}
+                          onChange={(e) => setPaymentMethod(e.target.value)}
+                          className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-xs font-semibold text-slate-900 dark:text-white"
+                        >
+                          <option value="PIX">Pix</option>
+                          <option value="DINHEIRO">Dinheiro em Espécie</option>
+                          <option value="TRANSFERENCIA">Transferência Bancária (TED/DOC)</option>
+                          <option value="CARTAO">Cartão de Crédito/Débito</option>
+                          <option value="OUTRO">Outro</option>
+                        </select>
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                      <div>
+                        <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                          Data do Pagamento
+                        </label>
+                        <input
+                          type="date"
+                          value={paymentDate}
+                          onChange={(e) => setPaymentDate(e.target.value)}
+                          className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-xs font-semibold text-slate-900 dark:text-white"
+                        />
+                      </div>
+
+                      <div>
+                        <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                          Observação / Comprovante
+                        </label>
+                        <input
+                          type="text"
+                          placeholder="Ex: Comprovante enviado no WhatsApp"
+                          value={paymentNote}
+                          onChange={(e) => setPaymentNote(e.target.value)}
+                          className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-xs font-semibold text-slate-900 dark:text-white"
+                        />
+                      </div>
+                    </div>
+
+                    <button
+                      type="submit"
+                      disabled={paymentSubmitting}
+                      className="w-full py-2.5 px-4 rounded-xl bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white font-semibold text-xs flex items-center justify-center gap-1.5 shadow-sm transition-all"
+                    >
+                      <Plus className="w-4 h-4" />
+                      <span>{paymentSubmitting ? "Registrando..." : "Confirmar Lançamento de Pagamento"}</span>
+                    </button>
+                  </form>
+                )
               )}
 
               {/* Histórico de Lançamentos */}

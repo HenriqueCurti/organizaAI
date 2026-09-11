@@ -115,6 +115,13 @@ export async function POST(
     return NextResponse.json({ error: "Sem permissão para registrar pagamento" }, { status: 403 });
   }
 
+  if (event.status !== "CLOSED") {
+    return NextResponse.json(
+      { error: "Os pagamentos só podem ser lançados após a liberação do evento (fechamento da lista)." },
+      { status: 400 }
+    );
+  }
+
   const family = await prisma.family.findUnique({
     where: { id: familyId, eventId },
     include: {

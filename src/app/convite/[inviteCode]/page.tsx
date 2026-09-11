@@ -44,6 +44,34 @@ interface PublicEvent {
   organizerPhone: string | null;
 }
 
+interface CurrentUser {
+  id: string;
+  name: string;
+  email: string;
+}
+
+interface ExistingFamilyMember {
+  id?: string;
+  name: string;
+  gender: string;
+  age: number;
+}
+
+interface ExistingFamily {
+  id: string;
+  familyName: string;
+  responsibleName: string;
+  responsibleEmail: string;
+  responsiblePhone: string | null;
+  paymentStatus: string;
+  members: ExistingFamilyMember[];
+  payingCount: number;
+  familyTotalCost: number;
+  familyTotalPaid: number;
+  familyPendingAmount: number;
+  payments?: any[];
+}
+
 export default function PublicInvitePage({
   params,
 }: {
@@ -51,6 +79,10 @@ export default function PublicInvitePage({
 }) {
   const { inviteCode } = use(params);
   const [event, setEvent] = useState<PublicEvent | null>(null);
+  const [currentUser, setCurrentUser] = useState<CurrentUser | null>(null);
+  const [isCreator, setIsCreator] = useState(false);
+  const [existingFamily, setExistingFamily] = useState<ExistingFamily | null>(null);
+  const [existingPix, setExistingPix] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [successData, setSuccessData] = useState<any>(null);
@@ -71,9 +103,37 @@ export default function PublicInvitePage({
   useEffect(() => {
     fetch(`/api/convite/${inviteCode}`)
       .then((res) => res.json())
-      .then((data) => {
+      .then(async (data) => {
         if (data.event) {
           setEvent(data.event);
+        }
+        if (data.currentUser) {
+          setCurrentUser(data.currentUser);
+          setFormData((prev) => ({
+            ...prev,
+            responsibleName: prev.responsibleName || data.currentUser.name || "",
+            responsibleEmail: data.currentUser.email || "",
+            members: prev.members.map((m, idx) =>
+              idx === 0 ? { ...m, name: m.name || data.currentUser.name || "" } : m
+            ),
+          }));
+        }
+        if (data.isCreator) {
+          setIsCreator(true);
+        }
+        if (data.existingFamily) {
+          setExistingFamily(data.existingFamily);
+          if (data.event?.id && data.event?.paymentsEnabled) {
+            try {
+              const pixRes = await fetch(
+                `/api/eventos/${data.event.id}/pix?familyId=${data.existingFamily.id}`
+              );
+              const pixJson = await pixRes.json();
+              if (pixJson.pix) setExistingPix(pixJson.pix);
+            } catch (e) {
+              console.error("Erro ao buscar Pix da família existente:", e);
+            }
+          }
         }
         setLoading(false);
       })
@@ -198,6 +258,32 @@ export default function PublicInvitePage({
       <Navbar />
 
       <main className="flex-1 max-w-2xl mx-auto w-full px-4 sm:px-6 py-8 space-y-6">
+        {/* Banner para o Organizador */}
+        {isCreator && (
+          <div className="p-4 rounded-2xl bg-purple-50 dark:bg-purple-950/40 border border-purple-200 dark:border-purple-900/60 flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-sm">
+            <div className="flex items-center gap-3">
+              <div className="p-2.5 rounded-xl bg-purple-500/10 text-purple-600 dark:text-purple-400 shrink-0">
+                <ShieldCheck className="w-5 h-5" />
+              </div>
+              <div>
+                <span className="text-xs sm:text-sm font-bold text-slate-900 dark:text-white block">
+                  Você é o organizador deste evento
+                </span>
+                <span className="text-xs text-slate-600 dark:text-slate-400">
+                  Gerencie participantes, rateio, custos e configurações no painel.
+                </span>
+              </div>
+            </div>
+            <Link
+              href={`/eventos/${event.id}`}
+              className="inline-flex items-center justify-center gap-1.5 px-4 py-2.5 rounded-xl bg-purple-600 hover:bg-purple-700 text-white text-xs font-semibold shadow-sm transition-all shrink-0 w-full sm:w-auto"
+            >
+              <span>Acessar Painel do Evento</span>
+              <ArrowRight className="w-3.5 h-3.5" />
+            </Link>
+          </div>
+        )}
+
         {/* Cabeçalho do Convite */}
         <div className="bg-white dark:bg-[#0f172a] rounded-3xl border border-slate-200 dark:border-slate-800 p-5 sm:p-8 shadow-sm space-y-4">
           <div className="flex flex-wrap items-center gap-2">
@@ -393,6 +479,210 @@ export default function PublicInvitePage({
               </Link>
             </div>
           </div>
+        ) : existingFamily ? (
+          /* Card de Presença Já Confirmada */
+          <div className="bg-white dark:bg-[#0f172a] rounded-3xl border border-slate-200 dark:border-slate-800 p-5 sm:p-8 shadow-sm space-y-6">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-4 border-b border-slate-100 dark:border-slate-800">
+              <div className="flex items-center gap-3">
+                <div className="w-12 h-12 rounded-2xl bg-emerald-100 dark:bg-emerald-950/60 text-emerald-600 dark:text-emerald-400 flex items-center justify-center shrink-0">
+                  <CheckCircle2 className="w-7 h-7" />
+                </div>
+                <div>
+                  <div className="flex items-center gap-2">
+                    <h2 className="text-lg sm:text-xl font-bold text-slate-900 dark:text-white">
+                      Sua Presença Está Confirmada!
+                    </h2>
+                  </div>
+                  <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
+                    Identificamos que você já confirmou a participação da sua família neste evento.
+                  </p>
+                </div>
+              </div>
+
+              <span
+                className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold self-start sm:self-center ${
+                  existingFamily.paymentStatus === "PAID"
+                    ? "bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300"
+                    : existingFamily.paymentStatus === "PARTIAL"
+                    ? "bg-blue-100 text-blue-800 dark:bg-blue-950 dark:text-blue-300"
+                    : "bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300"
+                }`}
+              >
+                {existingFamily.paymentStatus === "PAID" ? (
+                  <>
+                    <CheckCircle2 className="w-3.5 h-3.5" />
+                    <span>Cota Quitada</span>
+                  </>
+                ) : existingFamily.paymentStatus === "PARTIAL" ? (
+                  <>
+                    <Clock className="w-3.5 h-3.5" />
+                    <span>Pagamento Parcial</span>
+                  </>
+                ) : (
+                  <>
+                    <Clock className="w-3.5 h-3.5" />
+                    <span>Aguardando Pagamento</span>
+                  </>
+                )}
+              </span>
+            </div>
+
+            {/* Detalhes da Família */}
+            <div className="p-4 rounded-2xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 space-y-3">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1">
+                <div>
+                  <span className="text-xs text-slate-400 block">Família Cadastrada</span>
+                  <span className="text-sm font-bold text-slate-900 dark:text-white">
+                    {existingFamily.familyName}
+                  </span>
+                </div>
+                <div className="text-left sm:text-right">
+                  <span className="text-xs text-slate-400 block">Responsável</span>
+                  <span className="text-xs font-semibold text-slate-700 dark:text-slate-300">
+                    {existingFamily.responsibleName} ({existingFamily.responsibleEmail})
+                  </span>
+                </div>
+              </div>
+
+              {/* Lista de Membros */}
+              <div className="pt-2 border-t border-slate-200/60 dark:border-slate-800/80">
+                <span className="text-xs font-semibold text-slate-700 dark:text-slate-300 block mb-2">
+                  Participantes Confirmados ({existingFamily.members.length}):
+                </span>
+                <div className="flex flex-wrap gap-1.5">
+                  {existingFamily.members.map((m, idx) => (
+                    <span
+                      key={idx}
+                      className="inline-flex items-center gap-1 px-2.5 py-1 rounded-xl text-xs bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300"
+                    >
+                      <span>{m.name}</span>
+                      <span className="text-[10px] text-slate-400">({m.age} anos)</span>
+                      {m.age >= event.minPayingAge ? (
+                        <span className="text-[9px] font-bold text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-950/60 px-1.5 py-0.5 rounded">
+                          Pagante
+                        </span>
+                      ) : (
+                        <span className="text-[9px] font-bold text-slate-500 bg-slate-100 dark:bg-slate-700 px-1.5 py-0.5 rounded">
+                          Isento
+                        </span>
+                      )}
+                    </span>
+                  ))}
+                </div>
+              </div>
+            </div>
+
+            {/* Cota e Pix se Liberado */}
+            {event.isClosed ? (
+              <div className="space-y-4">
+                <div className="p-4 rounded-2xl bg-purple-50 dark:bg-purple-950/30 border border-purple-200 dark:border-purple-900/60 space-y-2">
+                  <div className="flex justify-between items-center text-xs">
+                    <span className="text-purple-900 dark:text-purple-300 font-medium">
+                      Cota Final ({existingFamily.payingCount} pagante(s) × R$ {event.estimatedCostPerQuota.toFixed(2)}):
+                    </span>
+                    <span className="font-bold text-purple-950 dark:text-purple-100 text-sm">
+                      R$ {existingFamily.familyTotalCost.toFixed(2)}
+                    </span>
+                  </div>
+                  {existingFamily.familyTotalPaid > 0 && (
+                    <div className="flex justify-between items-center text-xs text-emerald-700 dark:text-emerald-400">
+                      <span>Total já pago:</span>
+                      <span className="font-semibold">R$ {existingFamily.familyTotalPaid.toFixed(2)}</span>
+                    </div>
+                  )}
+                  <div className="flex justify-between items-center text-sm font-bold pt-2 border-t border-purple-200/60 dark:border-purple-900/60">
+                    <span className="text-purple-950 dark:text-purple-100">Saldo Pendente:</span>
+                    <span className="text-base text-purple-700 dark:text-purple-300">
+                      R$ {existingFamily.familyPendingAmount.toFixed(2)}
+                    </span>
+                  </div>
+                </div>
+
+                {/* Dados Pix se houver pendência e chave cadastrada */}
+                {existingFamily.familyPendingAmount > 0 && existingPix && (
+                  <div className="p-4 sm:p-5 rounded-2xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 space-y-4 text-center">
+                    <div className="flex items-center justify-center gap-2 text-xs font-bold text-slate-800 dark:text-slate-200">
+                      <Sparkles className="w-4 h-4 text-emerald-600" />
+                      <span>Pague via Pix Copia e Cola ou QR Code</span>
+                    </div>
+
+                    {existingPix.qrCode && (
+                      <div className="flex justify-center">
+                        <div className="p-3 bg-white rounded-2xl shadow-sm border border-slate-200 inline-block">
+                          <img
+                            src={existingPix.qrCode}
+                            alt="QR Code Pix"
+                            className="w-48 h-48 sm:w-56 sm:h-56 mx-auto object-contain rounded-lg"
+                          />
+                        </div>
+                      </div>
+                    )}
+
+                    {existingPix.payload && (
+                      <div className="space-y-2">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            navigator.clipboard.writeText(existingPix.payload);
+                            setCopiedPix(true);
+                            setTimeout(() => setCopiedPix(false), 2500);
+                          }}
+                          className="w-full py-3 px-4 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs flex items-center justify-center gap-2 shadow-sm transition-all"
+                        >
+                          {copiedPix ? (
+                            <>
+                              <Check className="w-4 h-4" />
+                              <span>Código Pix Copiado!</span>
+                            </>
+                          ) : (
+                            <>
+                              <Copy className="w-4 h-4" />
+                              <span>Copiar Código Pix Copia e Cola</span>
+                            </>
+                          )}
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+            ) : (
+              <div className="p-4 rounded-2xl bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800/60 flex items-start gap-3 text-xs text-amber-800 dark:text-amber-300">
+                <Clock className="w-5 h-5 shrink-0 mt-0.5 text-amber-600 dark:text-amber-400" />
+                <div>
+                  <span className="font-bold block text-sm">Confirmações em Aberto</span>
+                  <span className="leading-relaxed block mt-0.5">
+                    Sua família está confirmada na lista! O rateio final exato e as instruções de pagamento via Pix serão liberados assim que o organizador fechar a lista oficial.
+                  </span>
+                </div>
+              </div>
+            )}
+
+            {/* Ações de Navegação */}
+            <div className="flex flex-col sm:flex-row items-center justify-between gap-3 pt-2">
+              <Link
+                href="/dashboard"
+                className="w-full sm:w-auto inline-flex items-center justify-center gap-2 px-5 py-2.5 rounded-xl bg-slate-900 hover:bg-black dark:bg-slate-100 dark:hover:bg-white text-white dark:text-slate-900 text-xs font-semibold transition-all"
+              >
+                <span>Ir para Meus Eventos no Painel</span>
+                <ArrowRight className="w-3.5 h-3.5" />
+              </Link>
+
+              {event.organizerPhone && (
+                <a
+                  href={`https://wa.me/55${event.organizerPhone.replace(/\D/g, "")}?text=${encodeURIComponent(
+                    `Olá, ${event.creatorName}! Minha família (${existingFamily.familyName}) está confirmada no evento ${event.title}.`
+                  )}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="w-full sm:w-auto inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-300 text-xs font-semibold transition-all"
+                >
+                  <Send className="w-3.5 h-3.5 text-emerald-500" />
+                  <span>Falar com o Organizador</span>
+                </a>
+              )}
+            </div>
+          </div>
         ) : event.isClosed ? (
           <div className="bg-white dark:bg-[#0f172a] rounded-3xl border border-slate-200 dark:border-slate-800 p-8 text-center space-y-4">
             <div className="w-14 h-14 rounded-full bg-purple-100 dark:bg-purple-950/60 text-purple-600 dark:text-purple-400 flex items-center justify-center mx-auto">
@@ -430,9 +720,38 @@ export default function PublicInvitePage({
                 Confirmar Presença da sua Família
               </h2>
               <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
-                Preencha os dados abaixo. Não é necessário criar conta para confirmar!
+                {currentUser
+                  ? "Sua confirmação será vinculada à sua conta no OrganizaAI."
+                  : "Preencha os dados abaixo. Não é necessário criar conta para confirmar!"}
               </p>
             </div>
+
+            {currentUser ? (
+              <div className="p-3.5 rounded-2xl bg-emerald-50/80 dark:bg-emerald-950/30 border border-emerald-200 dark:border-emerald-900/50 flex flex-col sm:flex-row sm:items-center justify-between gap-2.5">
+                <div className="flex items-center gap-2.5 text-xs text-emerald-900 dark:text-emerald-200">
+                  <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 shrink-0 animate-pulse" />
+                  <span>
+                    Conectado como <strong>{currentUser.name}</strong> ({currentUser.email})
+                  </span>
+                </div>
+                <span className="text-[10px] font-bold bg-emerald-100 dark:bg-emerald-900/60 text-emerald-800 dark:text-emerald-300 px-2.5 py-1 rounded-full shrink-0 self-start sm:self-auto">
+                  Sessão Ativa
+                </span>
+              </div>
+            ) : (
+              <div className="p-3.5 rounded-2xl bg-slate-50 dark:bg-slate-900/60 border border-slate-200 dark:border-slate-800 flex flex-col sm:flex-row sm:items-center justify-between gap-2 text-xs">
+                <span className="text-slate-600 dark:text-slate-400">
+                  Já possui conta no OrganizaAI?
+                </span>
+                <Link
+                  href={`/login?from=/convite/${inviteCode}`}
+                  className="font-bold text-emerald-600 dark:text-emerald-400 hover:underline inline-flex items-center gap-1 shrink-0"
+                >
+                  <span>Fazer login para preencher automático</span>
+                  <ArrowRight className="w-3.5 h-3.5" />
+                </Link>
+              </div>
+            )}
 
             {/* Dados da Família */}
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -486,13 +805,20 @@ export default function PublicInvitePage({
                 <input
                   type="email"
                   required
+                  readOnly={Boolean(currentUser)}
                   placeholder="seuemail@exemplo.com"
                   value={formData.responsibleEmail}
                   onChange={(e) => setFormData({ ...formData, responsibleEmail: e.target.value })}
-                  className="w-full px-3 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900/50 text-slate-900 dark:text-white text-sm"
+                  className={`w-full px-3 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 text-sm ${
+                    currentUser
+                      ? "bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400 cursor-not-allowed"
+                      : "bg-white dark:bg-slate-900/50 text-slate-900 dark:text-white"
+                  }`}
                 />
                 <span className="text-[10px] text-slate-400 mt-1 block">
-                  Obrigatório para confirmação e evitar cadastros duplicados.
+                  {currentUser
+                    ? "E-mail da sua conta conectada (não pode ser alterado)."
+                    : "Obrigatório para confirmação e evitar cadastros duplicados."}
                 </span>
               </div>
             </div>
@@ -635,39 +961,41 @@ export default function PublicInvitePage({
               </div>
             </div>
 
-            {/* Opção Sem Fricção: Criar Conta Opcional */}
-            <div className="p-4 rounded-2xl bg-slate-50/70 dark:bg-slate-900/40 border border-slate-200/60 dark:border-slate-800/80 space-y-3">
-              <label className="flex items-center gap-2.5 cursor-pointer">
-                <input
-                  type="checkbox"
-                  checked={formData.createAccount}
-                  onChange={(e) => setFormData({ ...formData, createAccount: e.target.checked })}
-                  className="w-4 h-4 rounded text-emerald-600 focus:ring-emerald-500"
-                />
-                <span className="text-xs font-semibold text-slate-800 dark:text-slate-200">
-                  Desejo criar uma senha para acompanhar este evento no painel
-                </span>
-              </label>
-
-              {formData.createAccount && (
-                <div className="pt-2">
-                  <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
-                    Definir Senha de Acesso
-                  </label>
+            {/* Opção Sem Fricção: Criar Conta Opcional (apenas para visitantes) */}
+            {!currentUser && (
+              <div className="p-4 rounded-2xl bg-slate-50/70 dark:bg-slate-900/40 border border-slate-200/60 dark:border-slate-800/80 space-y-3">
+                <label className="flex items-center gap-2.5 cursor-pointer">
                   <input
-                    type="password"
-                    minLength={6}
-                    placeholder="Mínimo 6 caracteres"
-                    value={formData.password}
-                    onChange={(e) => setFormData({ ...formData, password: e.target.value })}
-                    className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-900 dark:text-white text-xs"
+                    type="checkbox"
+                    checked={formData.createAccount}
+                    onChange={(e) => setFormData({ ...formData, createAccount: e.target.checked })}
+                    className="w-4 h-4 rounded text-emerald-600 focus:ring-emerald-500"
                   />
-                  <span className="text-[11px] text-slate-400 mt-1 block">
-                    Seu login será o e-mail informado acima.
+                  <span className="text-xs font-semibold text-slate-800 dark:text-slate-200">
+                    Desejo criar uma senha para acompanhar este evento no painel
                   </span>
-                </div>
-              )}
-            </div>
+                </label>
+
+                {formData.createAccount && (
+                  <div className="pt-2">
+                    <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                      Definir Senha de Acesso
+                    </label>
+                    <input
+                      type="password"
+                      minLength={6}
+                      placeholder="Mínimo 6 caracteres"
+                      value={formData.password}
+                      onChange={(e) => setFormData({ ...formData, password: e.target.value })}
+                      className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-900 dark:text-white text-xs"
+                    />
+                    <span className="text-[11px] text-slate-400 mt-1 block">
+                      Seu login será o e-mail informado acima.
+                    </span>
+                  </div>
+                )}
+              </div>
+            )}
 
             {errorMessage && (
               <div className="p-4 rounded-2xl bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-900/60 flex items-start gap-3 text-rose-700 dark:text-rose-300 text-xs">

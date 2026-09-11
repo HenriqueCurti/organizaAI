@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { hashPassword } from "@/lib/auth";
+import { hashPassword, getCurrentUser } from "@/lib/auth";
 import { z } from "zod";
 
 const rsvpSchema = z.object({
@@ -31,6 +31,7 @@ export async function GET(
     where: { inviteCode },
     select: {
       id: true,
+      creatorId: true,
       title: true,
       description: true,
       startDate: true,
@@ -47,6 +48,7 @@ export async function GET(
       deletedAt: true,
       creator: {
         select: {
+          id: true,
           name: true,
         },
       },
@@ -90,6 +92,51 @@ export async function GET(
   const estimatedCostPerQuota =
     effectiveDivisor > 0 ? totalCosts / effectiveDivisor : 0;
 
+  const currentUser = await getCurrentUser();
+
+  let existingFamilyData = null;
+  if (currentUser) {
+    const existingFamily = await prisma.family.findFirst({
+      where: {
+        eventId: event.id,
+        OR: [
+          { responsibleId: currentUser.id },
+          { responsibleEmail: { equals: currentUser.email, mode: "insensitive" } },
+        ],
+      },
+      include: {
+        members: true,
+        payments: {
+          orderBy: { paidAt: "desc" },
+        },
+      },
+    });
+
+    if (existingFamily) {
+      const familyPayingCount = existingFamily.members.filter((m) => m.age >= event.minPayingAge).length;
+      const familyTotalCost = Number((familyPayingCount * estimatedCostPerQuota).toFixed(2));
+      const familyTotalPaid = Number(
+        existingFamily.payments.reduce((sum, p) => sum + p.amount, 0).toFixed(2)
+      );
+      const familyPendingAmount = Number(Math.max(0, familyTotalCost - familyTotalPaid).toFixed(2));
+
+      existingFamilyData = {
+        id: existingFamily.id,
+        familyName: existingFamily.familyName,
+        responsibleName: existingFamily.responsibleName,
+        responsibleEmail: existingFamily.responsibleEmail,
+        responsiblePhone: existingFamily.responsiblePhone,
+        paymentStatus: existingFamily.paymentStatus,
+        members: existingFamily.members,
+        payingCount: familyPayingCount,
+        familyTotalCost,
+        familyTotalPaid,
+        familyPendingAmount,
+        payments: existingFamily.payments,
+      };
+    }
+  }
+
   return NextResponse.json({
     event: {
       id: event.id,
@@ -111,6 +158,15 @@ export async function GET(
       pixReceiverName: event.pixReceiverName,
       organizerPhone: event.pixKeyType === "PHONE" ? event.pixKey : null,
     },
+    currentUser: currentUser
+      ? {
+          id: currentUser.id,
+          name: currentUser.name,
+          email: currentUser.email,
+        }
+      : null,
+    isCreator: Boolean(currentUser && currentUser.id === event.creatorId),
+    existingFamily: existingFamilyData,
   });
 }
 
@@ -156,23 +212,31 @@ export async function POST(
       members,
     } = parsed.data;
 
-    const normalizedEmail = responsibleEmail.trim().toLowerCase();
+    const currentUser = await getCurrentUser();
+    const normalizedEmail = (currentUser?.email || responsibleEmail).trim().toLowerCase();
 
-    // Validação anti-duplicidade: checar se já existe família com este e-mail no mesmo evento
+    // Validação anti-duplicidade: checar se já existe família com este e-mail ou do usuário logado no mesmo evento
     const existingFamilyWithEmail = await prisma.family.findFirst({
       where: {
         eventId: event.id,
-        responsibleEmail: {
-          equals: normalizedEmail,
-          mode: "insensitive",
-        },
+        OR: [
+          ...(currentUser ? [{ responsibleId: currentUser.id }] : []),
+          {
+            responsibleEmail: {
+              equals: normalizedEmail,
+              mode: "insensitive" as const,
+            },
+          },
+        ],
       },
     });
 
     if (existingFamilyWithEmail) {
       return NextResponse.json(
         {
-          error: `O e-mail "${normalizedEmail}" já foi cadastrado para este evento (${existingFamilyWithEmail.familyName}). Caso precise ajustar sua confirmação, entre em contato com o organizador.`,
+          error: currentUser
+            ? `Você já possui a família "${existingFamilyWithEmail.familyName}" cadastrada neste evento.`
+            : `O e-mail "${normalizedEmail}" já foi cadastrado para este evento (${existingFamilyWithEmail.familyName}). Caso precise ajustar sua confirmação, entre em contato com o organizador.`,
         },
         { status: 409 }
       );
@@ -180,34 +244,86 @@ export async function POST(
 
     let responsibleId: string | null = null;
 
-    // Se optou por criar conta
-    if (createAccount && normalizedEmail && password && password.length >= 6) {
-      const existingUser = await prisma.user.findUnique({
-        where: { email: normalizedEmail },
-      });
+    if (currentUser) {
+      responsibleId = currentUser.id;
 
-      if (!existingUser) {
-        const passwordHash = await hashPassword(password);
-        const newUser = await prisma.user.create({
-          data: {
-            name: responsibleName.trim(),
-            email: normalizedEmail,
-            passwordHash,
+      // Adiciona como membro do evento se ainda não for
+      const existingMember = await prisma.eventMember.findUnique({
+        where: {
+          eventId_userId: {
+            eventId: event.id,
+            userId: currentUser.id,
           },
-        });
-        responsibleId = newUser.id;
-
-        // Adiciona como membro do evento
+        },
+      });
+      if (!existingMember && event.creatorId !== currentUser.id) {
         await prisma.eventMember.create({
           data: {
             eventId: event.id,
-            userId: newUser.id,
+            userId: currentUser.id,
             role: "PARTICIPANT",
             canEdit: false,
           },
         });
-      } else {
+      }
+    } else {
+      // Usuário não está logado na sessão
+      const existingUser = await prisma.user.findUnique({
+        where: { email: normalizedEmail },
+      });
+
+      if (createAccount) {
+        if (existingUser) {
+          return NextResponse.json(
+            {
+              error: `Já existe uma conta cadastrada com o e-mail "${normalizedEmail}". Por favor, faça login para confirmar presença vinculada à sua conta.`,
+            },
+            { status: 400 }
+          );
+        }
+
+        if (password && password.length >= 6) {
+          const passwordHash = await hashPassword(password);
+          const newUser = await prisma.user.create({
+            data: {
+              name: responsibleName.trim(),
+              email: normalizedEmail,
+              passwordHash,
+            },
+          });
+          responsibleId = newUser.id;
+
+          // Adiciona como membro do evento
+          await prisma.eventMember.create({
+            data: {
+              eventId: event.id,
+              userId: newUser.id,
+              role: "PARTICIPANT",
+              canEdit: false,
+            },
+          });
+        }
+      } else if (existingUser) {
+        // Convidado não pediu para criar conta, mas o e-mail pertence a um usuário do sistema
         responsibleId = existingUser.id;
+        const existingMember = await prisma.eventMember.findUnique({
+          where: {
+            eventId_userId: {
+              eventId: event.id,
+              userId: existingUser.id,
+            },
+          },
+        });
+        if (!existingMember && event.creatorId !== existingUser.id) {
+          await prisma.eventMember.create({
+            data: {
+              eventId: event.id,
+              userId: existingUser.id,
+              role: "PARTICIPANT",
+              canEdit: false,
+            },
+          });
+        }
       }
     }
 
