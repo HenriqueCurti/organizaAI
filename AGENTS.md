@@ -47,3 +47,15 @@ This block is written and re-added by `next dev` — verify at `node_modules/nex
 > - Padrão de nomenclatura de branches: `feature/nome-da-feature` ou `fix/nome-do-ajuste`.
 > - Somente após finalização completa e validação da feature, a branch será integrada à `main` para deploy.
 
+---
+
+# DIRETIVA OBRIGATÓRIA: BOTÕES ASSÍNCRONOS E PROTEÇÃO CONTRA DUPLO CLIQUE (LOADING STATE)
+
+> [!IMPORTANT]
+> **Todo e qualquer botão que disparar mutação de dados, requisição de rede ou chamada de endpoint (POST, PUT, DELETE, etc.) DEVE operar de forma assíncrona estrita com proteção contra duplo clique.**
+> - **Inativação Imediata**: O botão DEVE ser desativado imediatamente (`disabled={loading}`) e seu manipulador de clique/submit DEVE ter guarda de reentrância (`if (loading) return`).
+> - **Feedback Visual e Animação**: Enquanto a requisição estiver em andamento, o botão DEVE exibir animação de carregamento (ícone `<Loader2 className="... animate-spin" />`) e alterar o texto para o gerúndio indicativo da ação (ex: "Salvando...", "Criando...", "Excluindo...", "Registrando...").
+> - **Liberação Apenas no Sucesso/Erro**: O estado de carregamento só pode ser desativado (`finally { setLoading(false); }`) após o encerramento da chamada do endpoint e sincronização/efetivação dos dados em tela e no banco.
+> - **Prevenção de Duplicações**: Nunca permita cliques subsequentes enquanto uma resposta do servidor estiver pendente.
+
+

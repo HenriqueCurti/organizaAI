@@ -4,7 +4,7 @@ import { Suspense, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { Navbar } from "@/components/navbar";
-import { ArrowRight, Lock, Mail, AlertCircle, Info } from "lucide-react";
+import { ArrowRight, Lock, Mail, AlertCircle, Info, Loader2 } from "lucide-react";
 
 function LoginForm() {
   const router = useRouter();
@@ -18,6 +18,7 @@ function LoginForm() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (loading) return;
     setError("");
     setLoading(true);
 
@@ -117,10 +118,19 @@ function LoginForm() {
         <button
           type="submit"
           disabled={loading}
-          className="w-full mt-2 py-3 px-4 rounded-xl bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white font-medium text-sm flex items-center justify-center gap-2 shadow-lg shadow-emerald-600/20 transition-all hover:shadow-none"
+          className="w-full mt-2 py-3 px-4 rounded-xl bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white font-medium text-sm flex items-center justify-center gap-2 shadow-lg shadow-emerald-600/20 transition-all hover:shadow-none min-h-[44px]"
         >
-          {loading ? "Entrando..." : "Acessar Plataforma"}
-          <ArrowRight className="w-4 h-4" />
+          {loading ? (
+            <>
+              <Loader2 className="w-4 h-4 animate-spin" />
+              <span>Entrando...</span>
+            </>
+          ) : (
+            <>
+              <span>Acessar Plataforma</span>
+              <ArrowRight className="w-4 h-4" />
+            </>
+          )}
         </button>
       </form>
 

@@ -16,6 +16,7 @@ import {
   UserPlus,
   ChevronRight,
   ShieldCheck,
+  Loader2,
 } from "lucide-react";
 import { useState, useEffect } from "react";
 
@@ -30,6 +31,7 @@ export function Navbar() {
   const pathname = usePathname();
   const [user, setUser] = useState<UserInfo | null>(null);
   const [loading, setLoading] = useState(true);
+  const [loggingOut, setLoggingOut] = useState(false);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
   useEffect(() => {
@@ -71,11 +73,17 @@ export function Navbar() {
   }, []);
 
   const handleLogout = async () => {
-    await fetch("/api/auth/logout", { method: "POST" });
-    setUser(null);
-    setMobileMenuOpen(false);
-    router.push("/");
-    router.refresh();
+    if (loggingOut) return;
+    setLoggingOut(true);
+    try {
+      await fetch("/api/auth/logout", { method: "POST" });
+      setUser(null);
+      setMobileMenuOpen(false);
+      router.push("/");
+      router.refresh();
+    } finally {
+      setLoggingOut(false);
+    }
   };
 
   const isActive = (path: string) => {
@@ -175,10 +183,15 @@ export function Navbar() {
                         </div>
                         <button
                           onClick={handleLogout}
+                          disabled={loggingOut}
                           title="Sair da conta"
-                          className="p-2 text-slate-400 hover:text-rose-500 rounded-xl hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
+                          className="p-2 text-slate-400 hover:text-rose-500 rounded-xl hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors disabled:opacity-50"
                         >
-                          <LogOut className="w-4 h-4" />
+                          {loggingOut ? (
+                            <Loader2 className="w-4 h-4 animate-spin text-rose-500" />
+                          ) : (
+                            <LogOut className="w-4 h-4" />
+                          )}
                         </button>
                       </div>
                     </div>
@@ -399,10 +412,20 @@ export function Navbar() {
           {!loading && user && (
             <button
               onClick={handleLogout}
-              className="flex items-center justify-center gap-2.5 w-full min-h-[44px] px-4 py-2.5 rounded-xl border border-rose-200 dark:border-rose-900/50 text-rose-600 dark:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-950/30 text-sm font-semibold transition-colors"
+              disabled={loggingOut}
+              className="flex items-center justify-center gap-2.5 w-full min-h-[44px] px-4 py-2.5 rounded-xl border border-rose-200 dark:border-rose-900/50 text-rose-600 dark:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-950/30 text-sm font-semibold transition-colors disabled:opacity-50"
             >
-              <LogOut className="w-4 h-4" />
-              <span>Sair da conta</span>
+              {loggingOut ? (
+                <>
+                  <Loader2 className="w-4 h-4 animate-spin text-rose-500" />
+                  <span>Saindo...</span>
+                </>
+              ) : (
+                <>
+                  <LogOut className="w-4 h-4" />
+                  <span>Sair da conta</span>
+                </>
+              )}
             </button>
           )}
 

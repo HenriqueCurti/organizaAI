@@ -33,6 +33,7 @@ import {
   Zap,
   Lock,
   Unlock,
+  Loader2,
 } from "lucide-react";
 import { ConfirmDeleteModal } from "@/components/confirm-delete-modal";
 
@@ -147,10 +148,14 @@ export default function EventDetailPage({
   const [showAddCost, setShowAddCost] = useState(false);
   const [newCost, setNewCost] = useState({ name: "", amount: "", dueDate: "", category: "ACOMODACAO" });
   const [editingCost, setEditingCost] = useState<Cost | null>(null);
+  const [savingCost, setSavingCost] = useState(false);
+  const [savingEditCost, setSavingEditCost] = useState(false);
+  const [deletingCostId, setDeletingCostId] = useState<string | null>(null);
 
   // Modais de Famílias
   const [showAddFamily, setShowAddFamily] = useState(false);
   const [familyModalError, setFamilyModalError] = useState<string | null>(null);
+  const [savingFamily, setSavingFamily] = useState(false);
   const [newFamily, setNewFamily] = useState({
     familyName: "",
     responsibleName: "",
@@ -165,6 +170,8 @@ export default function EventDetailPage({
     responsiblePhone: string;
     members: { name: string; gender: string; age: string }[];
   } | null>(null);
+  const [savingEditFamily, setSavingEditFamily] = useState(false);
+  const [deletingFamilyId, setDeletingFamilyId] = useState<string | null>(null);
 
   // Modal de Edição das Configurações Pix do Evento
   const [showEditPixConfig, setShowEditPixConfig] = useState(false);
@@ -194,6 +201,7 @@ export default function EventDetailPage({
   } | null>(null);
   const [customPixAmount, setCustomPixAmount] = useState<string>("");
   const [loadingPixAmount, setLoadingPixAmount] = useState(false);
+  const [openingFamilyPixId, setOpeningFamilyPixId] = useState<string | null>(null);
 
   // Modal de Registro e Histórico de Pagamentos
   const [paymentModalFamily, setPaymentModalFamily] = useState<Family | null>(null);
@@ -202,6 +210,7 @@ export default function EventDetailPage({
   const [paymentDate, setPaymentDate] = useState<string>("");
   const [paymentNote, setPaymentNote] = useState<string>("");
   const [paymentSubmitting, setPaymentSubmitting] = useState(false);
+  const [deletingPaymentId, setDeletingPaymentId] = useState<string | null>(null);
   const [copiedFamilyPix, setCopiedFamilyPix] = useState(false);
 
   // Dados do Churrascômetro
@@ -213,6 +222,8 @@ export default function EventDetailPage({
   const [newMemberEmail, setNewMemberEmail] = useState("");
   const [newMemberCanEdit, setNewMemberCanEdit] = useState(true);
   const [memberActionLoading, setMemberActionLoading] = useState(false);
+  const [updatingMemberId, setUpdatingMemberId] = useState<string | null>(null);
+  const [removingMemberId, setRemovingMemberId] = useState<string | null>(null);
   const [memberMessage, setMemberMessage] = useState<{ type: "success" | "error"; text: string } | null>(null);
 
   // Modal de Importação Rápida da Lista do WhatsApp
@@ -277,7 +288,7 @@ export default function EventDetailPage({
   };
 
   const handleToggleEventStatus = async (newStatus: "OPEN" | "CLOSED") => {
-    if (!event) return;
+    if (!event || statusLoading) return;
     const confirmMsg =
       newStatus === "CLOSED"
         ? "Deseja fechar as confirmações deste evento?\n\n• O link de convite deixará de aceitar novas confirmações ou alterações.\n• O valor da cota será fixado definitivamente com base nos participantes confirmados.\n• Os pagamentos via Pix serão liberados aos participantes."
@@ -353,8 +364,9 @@ export default function EventDetailPage({
   // --- CUSTOS ---
   const handleAddCost = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!newCost.name || !newCost.amount) return;
+    if (!newCost.name || !newCost.amount || savingCost) return;
 
+    setSavingCost(true);
     try {
       await fetch(`/api/eventos/${id}/custos`, {
         method: "POST",
@@ -363,16 +375,20 @@ export default function EventDetailPage({
       });
       setNewCost({ name: "", amount: "", dueDate: "", category: "ACOMODACAO" });
       setShowAddCost(false);
-      fetchEvent();
+      await fetchEvent();
+      await fetchBbq();
     } catch (e) {
       console.error(e);
+    } finally {
+      setSavingCost(false);
     }
   };
 
   const handleUpdateCost = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!editingCost || !editingCost.name || !editingCost.amount) return;
+    if (!editingCost || !editingCost.name || !editingCost.amount || savingEditCost) return;
 
+    setSavingEditCost(true);
     try {
       await fetch(`/api/eventos/${id}/custos/${editingCost.id}`, {
         method: "PUT",
@@ -385,19 +401,27 @@ export default function EventDetailPage({
         }),
       });
       setEditingCost(null);
-      fetchEvent();
+      await fetchEvent();
+      await fetchBbq();
     } catch (e) {
       console.error(e);
+    } finally {
+      setSavingEditCost(false);
     }
   };
 
   const handleDeleteCost = async (costId: string) => {
+    if (deletingCostId) return;
     if (!confirm("Tem certeza que deseja remover esta despesa?")) return;
+    setDeletingCostId(costId);
     try {
       await fetch(`/api/eventos/${id}/custos/${costId}`, { method: "DELETE" });
-      fetchEvent();
+      await fetchEvent();
+      await fetchBbq();
     } catch (e) {
       console.error(e);
+    } finally {
+      setDeletingCostId(null);
     }
   };
 
@@ -412,7 +436,7 @@ export default function EventDetailPage({
 
   const handleSavePayment = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!paymentModalFamily || !paymentAmount || parseFloat(paymentAmount) <= 0) return;
+    if (!paymentModalFamily || !paymentAmount || parseFloat(paymentAmount) <= 0 || paymentSubmitting) return;
 
     setPaymentSubmitting(true);
     try {
@@ -452,9 +476,10 @@ export default function EventDetailPage({
   };
 
   const handleDeletePaymentRecord = async (paymentId: string) => {
-    if (!paymentModalFamily) return;
+    if (!paymentModalFamily || deletingPaymentId) return;
     if (!confirm("Tem certeza que deseja estornar este lançamento de pagamento?")) return;
 
+    setDeletingPaymentId(paymentId);
     try {
       const res = await fetch(`/api/eventos/${id}/familias/${paymentModalFamily.id}/pagamentos/${paymentId}`, {
         method: "DELETE",
@@ -477,21 +502,29 @@ export default function EventDetailPage({
     } catch (e) {
       console.error(e);
       alert("Falha ao estornar pagamento");
+    } finally {
+      setDeletingPaymentId(null);
     }
   };
 
   const handleDeleteFamily = async (familyId: string) => {
+    if (deletingFamilyId) return;
     if (!confirm("Remover esta família e todos os seus participantes?")) return;
+    setDeletingFamilyId(familyId);
     try {
       await fetch(`/api/eventos/${id}/familias/${familyId}`, { method: "DELETE" });
-      fetchEvent();
-      fetchBbq();
+      await fetchEvent();
+      await fetchBbq();
     } catch (e) {
       console.error(e);
+    } finally {
+      setDeletingFamilyId(null);
     }
   };
 
   const handleOpenFamilyPix = async (family: Family, customAmount?: number) => {
+    if (openingFamilyPixId) return;
+    setOpeningFamilyPixId(family.id);
     try {
       setLoadingPixAmount(true);
       const url = customAmount !== undefined
@@ -521,6 +554,7 @@ export default function EventDetailPage({
       console.error(e);
     } finally {
       setLoadingPixAmount(false);
+      setOpeningFamilyPixId(null);
     }
   };
 
@@ -561,7 +595,9 @@ export default function EventDetailPage({
 
   const handleSaveFamily = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (savingFamily) return;
     setFamilyModalError(null);
+    setSavingFamily(true);
     try {
       const payload = {
         ...newFamily,
@@ -590,11 +626,13 @@ export default function EventDetailPage({
         members: [{ name: "", gender: "MALE", age: "30" }],
       });
       setShowAddFamily(false);
-      fetchEvent();
-      fetchBbq();
+      await fetchEvent();
+      await fetchBbq();
     } catch (e) {
       console.error(e);
       setFamilyModalError("Falha de conexão com o servidor ao salvar família.");
+    } finally {
+      setSavingFamily(false);
     }
   };
 
@@ -612,6 +650,7 @@ export default function EventDetailPage({
 
   const handleSavePixConfig = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (savingPixConfig) return;
     setSavingPixConfig(true);
     setPixConfigError(null);
     try {
@@ -636,7 +675,7 @@ export default function EventDetailPage({
         setShowEditPixConfig(false);
         setPixConfigSuccess(false);
       }, 800);
-      fetchEvent();
+      await fetchEvent();
     } catch {
       setPixConfigError("Falha de comunicação com o servidor.");
     } finally {
@@ -660,8 +699,9 @@ export default function EventDetailPage({
 
   const handleSaveEditedFamily = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!editingFamily) return;
+    if (!editingFamily || savingEditFamily) return;
 
+    setSavingEditFamily(true);
     try {
       const res = await fetch(`/api/eventos/${id}/familias/${editingFamily.id}`, {
         method: "PUT",
@@ -680,21 +720,23 @@ export default function EventDetailPage({
 
       if (res.ok) {
         setEditingFamily(null);
-        fetchEvent();
-        fetchBbq();
+        await fetchEvent();
+        await fetchBbq();
       } else {
         const data = await res.json();
         alert(data.error || "Erro ao salvar alterações da família");
       }
     } catch (e) {
       console.error(e);
+    } finally {
+      setSavingEditFamily(false);
     }
   };
 
   // --- MEMBROS & ADMINS ---
   const handleAddCoOrganizer = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!newMemberEmail) return;
+    if (!newMemberEmail || memberActionLoading) return;
 
     setMemberActionLoading(true);
     setMemberMessage(null);
@@ -715,37 +757,45 @@ export default function EventDetailPage({
       if (res.ok) {
         setMemberMessage({ type: "success", text: "Co-organizador adicionado com sucesso!" });
         setNewMemberEmail("");
-        fetchMembers();
+        await fetchMembers();
       } else {
         setMemberMessage({ type: "error", text: data.error || "Erro ao adicionar co-organizador" });
       }
-      setMemberActionLoading(false);
     } catch {
       setMemberMessage({ type: "error", text: "Falha de conexão com o servidor" });
+    } finally {
       setMemberActionLoading(false);
     }
   };
 
   const handleToggleMemberPermission = async (member: EventMemberInfo) => {
+    if (updatingMemberId) return;
+    setUpdatingMemberId(member.id);
     try {
       const res = await fetch(`/api/eventos/${id}/membros/${member.id}`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ canEdit: !member.canEdit }),
       });
-      if (res.ok) fetchMembers();
+      if (res.ok) await fetchMembers();
     } catch (e) {
       console.error(e);
+    } finally {
+      setUpdatingMemberId(null);
     }
   };
 
   const handleRemoveMember = async (memberId: string) => {
+    if (removingMemberId) return;
     if (!confirm("Remover este usuário da organização do evento?")) return;
+    setRemovingMemberId(memberId);
     try {
       const res = await fetch(`/api/eventos/${id}/membros/${memberId}`, { method: "DELETE" });
-      if (res.ok) fetchMembers();
+      if (res.ok) await fetchMembers();
     } catch (e) {
       console.error(e);
+    } finally {
+      setRemovingMemberId(null);
     }
   };
 
@@ -758,7 +808,7 @@ export default function EventDetailPage({
 
   const handleImportWhatsAppList = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!importText.trim()) return;
+    if (!importText.trim() || importLoading) return;
     setImportLoading(true);
     setImportFeedback(null);
 
@@ -886,8 +936,12 @@ export default function EventDetailPage({
                   className="inline-flex items-center justify-center gap-1.5 px-3.5 py-2.5 sm:py-2 rounded-xl text-xs font-semibold bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-700 hover:bg-slate-50 transition-all disabled:opacity-50"
                   title="Reabrir confirmações de participantes"
                 >
-                  <Unlock className="w-3.5 h-3.5 text-slate-500" />
-                  <span>Reabrir</span>
+                  {statusLoading ? (
+                    <Loader2 className="w-3.5 h-3.5 animate-spin text-slate-500" />
+                  ) : (
+                    <Unlock className="w-3.5 h-3.5 text-slate-500" />
+                  )}
+                  <span>{statusLoading ? "Reabrindo..." : "Reabrir"}</span>
                 </button>
               ) : (
                 <button
@@ -896,8 +950,12 @@ export default function EventDetailPage({
                   className="inline-flex items-center justify-center gap-1.5 px-3.5 py-2.5 sm:py-2 rounded-xl text-xs font-semibold bg-slate-900 hover:bg-black dark:bg-slate-100 dark:hover:bg-white text-white dark:text-slate-900 shadow-sm transition-all disabled:opacity-50"
                   title="Encerrar confirmações e iniciar cobrança Pix"
                 >
-                  <Lock className="w-3.5 h-3.5" />
-                  <span>Fechar Lista</span>
+                  {statusLoading ? (
+                    <Loader2 className="w-3.5 h-3.5 animate-spin text-white dark:text-slate-900" />
+                  ) : (
+                    <Lock className="w-3.5 h-3.5" />
+                  )}
+                  <span>{statusLoading ? "Fechando..." : "Fechar Lista"}</span>
                 </button>
               )
             )}
@@ -1098,8 +1156,12 @@ export default function EventDetailPage({
                   disabled={statusLoading}
                   className="inline-flex items-center gap-1.5 px-3.5 py-2.5 rounded-xl bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-700 text-xs font-semibold hover:bg-slate-50 transition-all w-full sm:w-auto justify-center disabled:opacity-50"
                 >
-                  <Unlock className="w-3.5 h-3.5 text-slate-500" />
-                  <span>Reabrir Confirmações</span>
+                  {statusLoading ? (
+                    <Loader2 className="w-3.5 h-3.5 animate-spin text-slate-500" />
+                  ) : (
+                    <Unlock className="w-3.5 h-3.5 text-slate-500" />
+                  )}
+                  <span>{statusLoading ? "Reabrindo..." : "Reabrir Confirmações"}</span>
                 </button>
               )}
             </div>
@@ -1138,8 +1200,12 @@ export default function EventDetailPage({
                   disabled={statusLoading}
                   className="inline-flex items-center gap-1.5 px-3.5 py-2.5 rounded-xl bg-slate-900 hover:bg-black dark:bg-slate-100 dark:hover:bg-white text-white dark:text-slate-900 text-xs font-semibold shadow-sm transition-all w-full sm:w-auto justify-center disabled:opacity-50"
                 >
-                  <Lock className="w-3.5 h-3.5" />
-                  <span>Fechar Lista & Liberar Pix</span>
+                  {statusLoading ? (
+                    <Loader2 className="w-3.5 h-3.5 animate-spin text-white dark:text-slate-900" />
+                  ) : (
+                    <Lock className="w-3.5 h-3.5" />
+                  )}
+                  <span>{statusLoading ? "Fechando..." : "Fechar Lista & Liberar Pix"}</span>
                 </button>
               )}
             </div>
@@ -1500,7 +1566,7 @@ export default function EventDetailPage({
                           {event.pixKey && (
                             <button
                               onClick={() => handleOpenFamilyPix(family)}
-                              disabled={event.status !== "CLOSED"}
+                              disabled={event.status !== "CLOSED" || openingFamilyPixId === family.id}
                               className="inline-flex items-center gap-1 px-3 py-2 sm:py-1.5 rounded-xl text-xs font-semibold bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 transition-colors disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-slate-100 dark:disabled:hover:bg-slate-800"
                               title={
                                 event.status !== "CLOSED"
@@ -1510,7 +1576,11 @@ export default function EventDetailPage({
                                   : "Ver dados do Pix"
                               }
                             >
-                              <QrCode className="w-3.5 h-3.5" />
+                              {openingFamilyPixId === family.id ? (
+                                <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                              ) : (
+                                <QrCode className="w-3.5 h-3.5" />
+                              )}
                               <span>Pix</span>
                             </button>
                           )}
@@ -1527,10 +1597,15 @@ export default function EventDetailPage({
 
                               <button
                                 onClick={() => handleDeleteFamily(family.id)}
+                                disabled={deletingFamilyId === family.id}
                                 title="Remover família"
-                                className="p-2 sm:p-1.5 text-slate-400 hover:text-rose-500 rounded-lg hover:bg-rose-50 dark:hover:bg-rose-950/40 transition-colors"
+                                className="p-2 sm:p-1.5 text-slate-400 hover:text-rose-500 rounded-lg hover:bg-rose-50 dark:hover:bg-rose-950/40 transition-colors disabled:opacity-50"
                               >
-                                <Trash2 className="w-4 h-4" />
+                                {deletingFamilyId === family.id ? (
+                                  <Loader2 className="w-4 h-4 animate-spin text-rose-500" />
+                                ) : (
+                                  <Trash2 className="w-4 h-4" />
+                                )}
                               </button>
                             </>
                           )}
@@ -1636,10 +1711,15 @@ export default function EventDetailPage({
                             </button>
                             <button
                               onClick={() => handleDeleteCost(cost.id)}
-                              className="p-2 text-slate-400 hover:text-rose-500 rounded-lg hover:bg-rose-50 dark:hover:bg-rose-950/40 transition-colors"
+                              disabled={deletingCostId === cost.id}
+                              className="p-2 text-slate-400 hover:text-rose-500 rounded-lg hover:bg-rose-50 dark:hover:bg-rose-950/40 transition-colors disabled:opacity-50"
                               title="Excluir Despesa"
                             >
-                              <Trash2 className="w-4 h-4" />
+                              {deletingCostId === cost.id ? (
+                                <Loader2 className="w-4 h-4 animate-spin text-rose-500" />
+                              ) : (
+                                <Trash2 className="w-4 h-4" />
+                              )}
                             </button>
                           </div>
                         )}
@@ -1704,10 +1784,15 @@ export default function EventDetailPage({
                                 </button>
                                 <button
                                   onClick={() => handleDeleteCost(cost.id)}
+                                  disabled={deletingCostId === cost.id}
                                   title="Excluir Despesa"
-                                  className="p-1.5 text-slate-400 hover:text-rose-500 rounded-lg hover:bg-rose-50 dark:hover:bg-rose-950/40 transition-colors"
+                                  className="p-1.5 text-slate-400 hover:text-rose-500 rounded-lg hover:bg-rose-50 dark:hover:bg-rose-950/40 transition-colors disabled:opacity-50"
                                 >
-                                  <Trash2 className="w-4 h-4" />
+                                  {deletingCostId === cost.id ? (
+                                    <Loader2 className="w-4 h-4 animate-spin text-rose-500" />
+                                  ) : (
+                                    <Trash2 className="w-4 h-4" />
+                                  )}
                                 </button>
                               </div>
                             </td>
@@ -2118,14 +2203,16 @@ export default function EventDetailPage({
                             {event.isOwner ? (
                               <button
                                 onClick={() => handleToggleMemberPermission(m)}
+                                disabled={updatingMemberId === m.id}
                                 title="Clique para alternar permissão de edição"
-                                className={`text-xs font-semibold px-3 py-1 rounded-full transition-colors ${
+                                className={`text-xs font-semibold px-3 py-1 rounded-full transition-colors disabled:opacity-50 inline-flex items-center gap-1 ${
                                   m.canEdit
                                     ? "bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300 hover:opacity-80"
                                     : "bg-slate-200 text-slate-700 dark:bg-slate-800 dark:text-slate-400 hover:opacity-80"
                                 }`}
                               >
-                                {m.canEdit ? "Pode Editar" : "Apenas Visualizar"}
+                                {updatingMemberId === m.id && <Loader2 className="w-3 h-3 animate-spin" />}
+                                <span>{updatingMemberId === m.id ? "Salvando..." : (m.canEdit ? "Pode Editar" : "Apenas Visualizar")}</span>
                               </button>
                             ) : (
                               <span className="text-xs font-semibold px-2.5 py-1 rounded-full bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300">
@@ -2136,10 +2223,15 @@ export default function EventDetailPage({
                             {event.isOwner && (
                               <button
                                 onClick={() => handleRemoveMember(m.id)}
+                                disabled={removingMemberId === m.id}
                                 title="Remover Co-Organizador"
-                                className="p-1.5 text-slate-400 hover:text-rose-500 rounded-lg hover:bg-rose-50 dark:hover:bg-rose-950/40 transition-colors"
+                                className="p-1.5 text-slate-400 hover:text-rose-500 rounded-lg hover:bg-rose-50 dark:hover:bg-rose-950/40 transition-colors disabled:opacity-50"
                               >
-                                <Trash2 className="w-4 h-4" />
+                                {removingMemberId === m.id ? (
+                                  <Loader2 className="w-4 h-4 animate-spin text-rose-500" />
+                                ) : (
+                                  <Trash2 className="w-4 h-4" />
+                                )}
                               </button>
                             )}
                           </div>
@@ -2208,11 +2300,15 @@ export default function EventDetailPage({
 
                       <button
                         type="submit"
-                        disabled={memberActionLoading}
-                        className="w-full py-2.5 px-4 rounded-xl bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white font-semibold text-xs transition-all shadow-sm flex items-center justify-center gap-1.5 mt-2"
+                        disabled={memberActionLoading || !newMemberEmail.trim()}
+                        className="w-full py-2.5 px-4 rounded-xl bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white font-semibold text-xs transition-all shadow-sm flex items-center justify-center gap-1.5 mt-2 min-h-[42px]"
                       >
-                        <UserPlus className="w-3.5 h-3.5" />
-                        {memberActionLoading ? "Adicionando..." : "Atribuir como Co-Organizador"}
+                        {memberActionLoading ? (
+                          <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                        ) : (
+                          <UserPlus className="w-3.5 h-3.5" />
+                        )}
+                        <span>{memberActionLoading ? "Adicionando..." : "Atribuir como Co-Organizador"}</span>
                       </button>
                     </form>
                   ) : (
@@ -2306,9 +2402,11 @@ export default function EventDetailPage({
                   </button>
                   <button
                     type="submit"
-                    className="px-4 py-2.5 rounded-xl text-xs font-semibold bg-emerald-600 hover:bg-emerald-700 text-white shadow-sm"
+                    disabled={savingCost || !newCost.name || !newCost.amount}
+                    className="px-4 py-2.5 rounded-xl text-xs font-semibold bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white shadow-sm flex items-center gap-1.5 min-h-[42px]"
                   >
-                    Salvar Custo
+                    {savingCost && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
+                    <span>{savingCost ? "Salvando..." : "Salvar Custo"}</span>
                   </button>
                 </div>
               </form>
@@ -2340,32 +2438,30 @@ export default function EventDetailPage({
                   />
                 </div>
 
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                  <div>
-                    <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
-                      Valor Total (R$) *
-                    </label>
-                    <input
-                      type="number"
-                      step="0.01"
-                      required
-                      value={editingCost.amount}
-                      onChange={(e) => setEditingCost({ ...editingCost, amount: parseFloat(e.target.value) || 0 })}
-                      className="w-full px-3 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-900 dark:text-white text-sm"
-                    />
-                  </div>
+                <div>
+                  <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                    Valor (R$) *
+                  </label>
+                  <input
+                    type="number"
+                    step="0.01"
+                    required
+                    value={editingCost.amount}
+                    onChange={(e) => setEditingCost({ ...editingCost, amount: parseFloat(e.target.value) || 0 })}
+                    className="w-full px-3 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-900 dark:text-white text-sm"
+                  />
+                </div>
 
-                  <div>
-                    <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
-                      Vencimento
-                    </label>
-                    <input
-                      type="date"
-                      value={editingCost.dueDate || ""}
-                      onChange={(e) => setEditingCost({ ...editingCost, dueDate: e.target.value })}
-                      className="w-full px-3 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-900 dark:text-white text-sm"
-                    />
-                  </div>
+                <div>
+                  <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                    Data de Vencimento
+                  </label>
+                  <input
+                    type="date"
+                    value={editingCost.dueDate || ""}
+                    onChange={(e) => setEditingCost({ ...editingCost, dueDate: e.target.value })}
+                    className="w-full px-3 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-900 dark:text-white text-sm"
+                  />
                 </div>
 
                 <div>
@@ -2394,9 +2490,11 @@ export default function EventDetailPage({
                   </button>
                   <button
                     type="submit"
-                    className="px-4 py-2.5 rounded-xl text-xs font-semibold bg-emerald-600 hover:bg-emerald-700 text-white shadow-sm"
+                    disabled={savingEditCost || !editingCost.name || !editingCost.amount}
+                    className="px-4 py-2.5 rounded-xl text-xs font-semibold bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white shadow-sm flex items-center gap-1.5 min-h-[42px]"
                   >
-                    Salvar Alterações
+                    {savingEditCost && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
+                    <span>{savingEditCost ? "Salvando..." : "Salvar Alterações"}</span>
                   </button>
                 </div>
               </form>
@@ -2611,9 +2709,11 @@ export default function EventDetailPage({
                   </button>
                   <button
                     type="submit"
-                    className="px-4 py-2.5 rounded-xl text-xs font-semibold bg-emerald-600 hover:bg-emerald-700 text-white shadow-sm"
+                    disabled={savingFamily || !newFamily.familyName || !newFamily.responsibleName}
+                    className="px-4 py-2.5 rounded-xl text-xs font-semibold bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white shadow-sm flex items-center gap-1.5 min-h-[42px]"
                   >
-                    Salvar Família
+                    {savingFamily && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
+                    <span>{savingFamily ? "Salvando Família..." : "Salvar Família"}</span>
                   </button>
                 </div>
               </form>
@@ -2743,10 +2843,11 @@ export default function EventDetailPage({
                   </button>
                   <button
                     type="submit"
-                    disabled={savingPixConfig}
-                    className="px-5 py-2.5 rounded-xl text-xs font-semibold bg-emerald-600 hover:bg-emerald-700 text-white shadow-sm disabled:opacity-50 flex items-center gap-2"
+                    disabled={savingPixConfig || !pixConfigForm.pixKey || !pixConfigForm.pixReceiverName}
+                    className="px-5 py-2.5 rounded-xl text-xs font-semibold bg-emerald-600 hover:bg-emerald-700 text-white shadow-sm disabled:opacity-50 flex items-center gap-2 min-h-[42px]"
                   >
-                    {savingPixConfig ? "Salvando..." : "Salvar Configurações Pix"}
+                    {savingPixConfig && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
+                    <span>{savingPixConfig ? "Salvando..." : "Salvar Configurações Pix"}</span>
                   </button>
                 </div>
               </form>
@@ -2931,9 +3032,11 @@ export default function EventDetailPage({
                   </button>
                   <button
                     type="submit"
-                    className="px-4 py-2.5 rounded-xl text-xs font-semibold bg-emerald-600 hover:bg-emerald-700 text-white shadow-sm"
+                    disabled={savingEditFamily || !editingFamily.familyName || !editingFamily.responsibleName}
+                    className="px-4 py-2.5 rounded-xl text-xs font-semibold bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white shadow-sm flex items-center gap-1.5 min-h-[42px]"
                   >
-                    Salvar Alterações
+                    {savingEditFamily && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
+                    <span>{savingEditFamily ? "Salvando..." : "Salvar Alterações"}</span>
                   </button>
                 </div>
               </form>
@@ -3281,9 +3384,13 @@ export default function EventDetailPage({
                     <button
                       type="submit"
                       disabled={paymentSubmitting}
-                      className="w-full py-2.5 px-4 rounded-xl bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white font-semibold text-xs flex items-center justify-center gap-1.5 shadow-sm transition-all"
+                      className="w-full py-2.5 px-4 rounded-xl bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white font-semibold text-xs flex items-center justify-center gap-1.5 shadow-sm transition-all min-h-[42px]"
                     >
-                      <Plus className="w-4 h-4" />
+                      {paymentSubmitting ? (
+                        <Loader2 className="w-4 h-4 animate-spin" />
+                      ) : (
+                        <Plus className="w-4 h-4" />
+                      )}
                       <span>{paymentSubmitting ? "Registrando..." : "Confirmar Lançamento de Pagamento"}</span>
                     </button>
                   </form>
@@ -3332,10 +3439,15 @@ export default function EventDetailPage({
                         {event.canEdit && (
                           <button
                             onClick={() => handleDeletePaymentRecord(payment.id)}
+                            disabled={deletingPaymentId === payment.id}
                             title="Estornar / Excluir pagamento"
-                            className="p-1.5 text-slate-400 hover:text-rose-500 rounded-lg transition-colors"
+                            className="p-1.5 text-slate-400 hover:text-rose-500 rounded-lg transition-colors disabled:opacity-50"
                           >
-                            <Trash2 className="w-3.5 h-3.5" />
+                            {deletingPaymentId === payment.id ? (
+                              <Loader2 className="w-3.5 h-3.5 animate-spin text-rose-500" />
+                            ) : (
+                              <Trash2 className="w-3.5 h-3.5" />
+                            )}
                           </button>
                         )}
                       </div>
@@ -3437,9 +3549,10 @@ export default function EventDetailPage({
                   <button
                     type="submit"
                     disabled={importLoading || !importText.trim()}
-                    className="px-4 py-2.5 rounded-xl text-xs font-semibold bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white shadow-sm transition-all flex items-center gap-1.5"
+                    className="px-4 py-2.5 rounded-xl text-xs font-semibold bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white shadow-sm transition-all flex items-center gap-1.5 min-h-[42px]"
                   >
-                    {importLoading ? "Processando..." : "Importar Participantes"}
+                    {importLoading && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
+                    <span>{importLoading ? "Processando..." : "Importar Participantes"}</span>
                   </button>
                 </div>
               </form>

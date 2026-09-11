@@ -4,7 +4,7 @@ import { Suspense, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { Navbar } from "@/components/navbar";
-import { ArrowRight, Lock, Mail, User, AlertCircle, CheckCircle2 } from "lucide-react";
+import { ArrowRight, Lock, Mail, User, AlertCircle, CheckCircle2, Loader2 } from "lucide-react";
 
 function RegisterForm() {
   const router = useRouter();
@@ -19,6 +19,7 @@ function RegisterForm() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (loading) return;
     setError("");
     setLoading(true);
 
@@ -141,10 +142,19 @@ function RegisterForm() {
         <button
           type="submit"
           disabled={loading}
-          className="w-full py-3 px-4 rounded-xl bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white font-medium text-sm flex items-center justify-center gap-2 shadow-lg shadow-emerald-600/20 transition-all hover:shadow-none"
+          className="w-full py-3 px-4 rounded-xl bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white font-medium text-sm flex items-center justify-center gap-2 shadow-lg shadow-emerald-600/20 transition-all hover:shadow-none min-h-[44px]"
         >
-          {loading ? "Criando conta..." : "Criar Conta Gratuita"}
-          <ArrowRight className="w-4 h-4" />
+          {loading ? (
+            <>
+              <Loader2 className="w-4 h-4 animate-spin" />
+              <span>Criando conta...</span>
+            </>
+          ) : (
+            <>
+              <span>Criar Conta Gratuita</span>
+              <ArrowRight className="w-4 h-4" />
+            </>
+          )}
         </button>
       </form>
 

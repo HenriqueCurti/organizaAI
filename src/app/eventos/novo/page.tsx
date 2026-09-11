@@ -18,6 +18,7 @@ import {
   Plus,
   Trash2,
   Sparkles,
+  Loader2,
 } from "lucide-react";
 
 interface InitialCostItem {
@@ -100,6 +101,7 @@ export default function NewEventPage() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (loading) return;
     setError("");
     setLoading(true);
 
@@ -567,7 +569,10 @@ export default function NewEventPage() {
                 className="w-full py-4 px-6 rounded-2xl bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white font-bold text-sm sm:text-base flex items-center justify-center gap-2 shadow-lg shadow-emerald-600/25 transition-all hover:shadow-none cursor-pointer"
               >
                 {loading ? (
-                  "Criando evento..."
+                  <>
+                    <Loader2 className="w-5 h-5 animate-spin" />
+                    <span>Criando evento...</span>
+                  </>
                 ) : mode === "QUICK" ? (
                   <>
                     <Zap className="w-5 h-5 text-amber-300" />

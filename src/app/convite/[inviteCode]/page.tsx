@@ -22,6 +22,7 @@ import {
   Sparkles,
   Send,
   AlertCircle,
+  Loader2,
 } from "lucide-react";
 
 interface PublicEvent {
@@ -180,6 +181,7 @@ export default function PublicInvitePage({
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (submitting) return;
     setErrorMessage(null);
     setSubmitting(true);
 
@@ -1007,10 +1009,19 @@ export default function PublicInvitePage({
             <button
               type="submit"
               disabled={submitting}
-              className="w-full py-3.5 px-4 rounded-xl bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white font-bold text-sm flex items-center justify-center gap-2 shadow-lg shadow-emerald-600/20 transition-all"
+              className="w-full py-3.5 px-4 rounded-xl bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white font-bold text-sm flex items-center justify-center gap-2 shadow-lg shadow-emerald-600/20 transition-all min-h-[44px]"
             >
-              {submitting ? "Confirmando..." : "Confirmar Presença da Família"}
-              <ArrowRight className="w-4 h-4" />
+              {submitting ? (
+                <>
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                  <span>Confirmando Presença...</span>
+                </>
+              ) : (
+                <>
+                  <span>Confirmar Presença da Família</span>
+                  <ArrowRight className="w-4 h-4" />
+                </>
+              )}
             </button>
           </form>
         )}
