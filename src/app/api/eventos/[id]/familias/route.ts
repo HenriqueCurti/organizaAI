@@ -11,7 +11,7 @@ const createFamilySchema = z.object({
   members: z
     .array(
       z.object({
-        name: z.string().min(2, "Nome do membro é obrigatório"),
+        name: z.string().default(""),
         gender: z.string().default("OTHER"),
         age: z.coerce.number().min(0, "Idade inválida"),
       })
@@ -56,20 +56,48 @@ export async function POST(
 
     const { familyName, responsibleName, responsibleEmail, responsiblePhone, members } = parsed.data;
 
+    let normalizedEmail: string | null = null;
+    if (responsibleEmail && responsibleEmail.trim().length > 0) {
+      normalizedEmail = responsibleEmail.trim().toLowerCase();
+      const existingFamily = await prisma.family.findFirst({
+        where: {
+          eventId,
+          responsibleEmail: {
+            equals: normalizedEmail,
+            mode: "insensitive",
+          },
+        },
+      });
+
+      if (existingFamily) {
+        return NextResponse.json(
+          { error: `Já existe uma família cadastrada com o e-mail "${normalizedEmail}" neste evento (${existingFamily.familyName}).` },
+          { status: 409 }
+        );
+      }
+    }
+
+    const processedMembers = members.map((m, index) => ({
+      name:
+        m.name && m.name.trim().length > 0
+          ? m.name.trim()
+          : index === 0
+          ? responsibleName.trim()
+          : `Membro ${index + 1}`,
+      gender: m.gender,
+      age: m.age,
+      isPaying: m.age >= event.minPayingAge,
+    }));
+
     const family = await prisma.family.create({
       data: {
         eventId,
-        familyName,
-        responsibleName,
-        responsibleEmail: responsibleEmail || null,
-        responsiblePhone: responsiblePhone || null,
+        familyName: familyName.trim(),
+        responsibleName: responsibleName.trim(),
+        responsibleEmail: normalizedEmail,
+        responsiblePhone: responsiblePhone?.trim() || null,
         members: {
-          create: members.map((m) => ({
-            name: m.name,
-            gender: m.gender,
-            age: m.age,
-            isPaying: m.age >= event.minPayingAge,
-          })),
+          create: processedMembers,
         },
       },
       include: {

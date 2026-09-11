@@ -6,14 +6,14 @@ import { z } from "zod";
 const rsvpSchema = z.object({
   familyName: z.string().min(2, "O nome da família é obrigatório"),
   responsibleName: z.string().min(2, "Seu nome é obrigatório"),
-  responsibleEmail: z.string().email("E-mail inválido").optional().or(z.literal("")),
+  responsibleEmail: z.string().min(1, "O e-mail é obrigatório").email("E-mail inválido"),
   responsiblePhone: z.string().optional(),
   createAccount: z.boolean().default(false),
   password: z.string().optional(),
   members: z
     .array(
       z.object({
-        name: z.string().min(2, "Nome do participante é obrigatório"),
+        name: z.string().default(""),
         gender: z.string().default("OTHER"),
         age: z.coerce.number().min(0, "Idade inválida"),
       })
@@ -155,20 +155,42 @@ export async function POST(
       members,
     } = parsed.data;
 
+    const normalizedEmail = responsibleEmail.trim().toLowerCase();
+
+    // Validação anti-duplicidade: checar se já existe família com este e-mail no mesmo evento
+    const existingFamilyWithEmail = await prisma.family.findFirst({
+      where: {
+        eventId: event.id,
+        responsibleEmail: {
+          equals: normalizedEmail,
+          mode: "insensitive",
+        },
+      },
+    });
+
+    if (existingFamilyWithEmail) {
+      return NextResponse.json(
+        {
+          error: `O e-mail "${normalizedEmail}" já foi cadastrado para este evento (${existingFamilyWithEmail.familyName}). Caso precise ajustar sua confirmação, entre em contato com o organizador.`,
+        },
+        { status: 409 }
+      );
+    }
+
     let responsibleId: string | null = null;
 
     // Se optou por criar conta
-    if (createAccount && responsibleEmail && password && password.length >= 6) {
+    if (createAccount && normalizedEmail && password && password.length >= 6) {
       const existingUser = await prisma.user.findUnique({
-        where: { email: responsibleEmail.toLowerCase() },
+        where: { email: normalizedEmail },
       });
 
       if (!existingUser) {
         const passwordHash = await hashPassword(password);
         const newUser = await prisma.user.create({
           data: {
-            name: responsibleName,
-            email: responsibleEmail.toLowerCase(),
+            name: responsibleName.trim(),
+            email: normalizedEmail,
             passwordHash,
           },
         });
@@ -188,22 +210,34 @@ export async function POST(
       }
     }
 
+    // Processa os membros garantindo que o primeiro membro seja o responsável caso o nome venha vazio
+    const processedMembers = members.map((m, index) => {
+      const finalName =
+        m.name && m.name.trim().length > 0
+          ? m.name.trim()
+          : index === 0
+          ? responsibleName.trim()
+          : `Membro ${index + 1}`;
+
+      return {
+        name: finalName,
+        gender: m.gender,
+        age: m.age,
+        isPaying: m.age >= event.minPayingAge,
+      };
+    });
+
     const family = await prisma.family.create({
       data: {
         eventId: event.id,
         responsibleId,
-        familyName,
-        responsibleName,
-        responsibleEmail: responsibleEmail || null,
-        responsiblePhone: responsiblePhone || null,
+        familyName: familyName.trim(),
+        responsibleName: responsibleName.trim(),
+        responsibleEmail: normalizedEmail,
+        responsiblePhone: responsiblePhone?.trim() || null,
         paymentStatus: "PENDING",
         members: {
-          create: members.map((m) => ({
-            name: m.name,
-            gender: m.gender,
-            age: m.age,
-            isPaying: m.age >= event.minPayingAge,
-          })),
+          create: processedMembers,
         },
       },
       include: {

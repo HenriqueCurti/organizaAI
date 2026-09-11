@@ -21,6 +21,7 @@ import {
   Clock,
   Sparkles,
   Send,
+  AlertCircle,
 } from "lucide-react";
 
 interface PublicEvent {
@@ -54,6 +55,7 @@ export default function PublicInvitePage({
   const [submitting, setSubmitting] = useState(false);
   const [successData, setSuccessData] = useState<any>(null);
   const [copiedPix, setCopiedPix] = useState(false);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
   // Formulário do convidado
   const [formData, setFormData] = useState({
@@ -78,6 +80,20 @@ export default function PublicInvitePage({
       .catch(() => setLoading(false));
   }, [inviteCode]);
 
+  const handleResponsibleNameChange = (val: string) => {
+    const updatedMembers = [...formData.members];
+    if (updatedMembers.length > 0) {
+      if (!updatedMembers[0].name || updatedMembers[0].name === formData.responsibleName) {
+        updatedMembers[0] = { ...updatedMembers[0], name: val };
+      }
+    }
+    setFormData({
+      ...formData,
+      responsibleName: val,
+      members: updatedMembers,
+    });
+  };
+
   const handleAddMember = () => {
     setFormData({
       ...formData,
@@ -86,7 +102,7 @@ export default function PublicInvitePage({
   };
 
   const handleRemoveMember = (idx: number) => {
-    if (formData.members.length === 1) return;
+    if (idx === 0 || formData.members.length === 1) return;
     setFormData({
       ...formData,
       members: formData.members.filter((_, i) => i !== idx),
@@ -104,13 +120,23 @@ export default function PublicInvitePage({
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    setErrorMessage(null);
     setSubmitting(true);
 
     try {
+      const submissionData = {
+        ...formData,
+        responsibleEmail: formData.responsibleEmail.trim(),
+        members: formData.members.map((m, idx) => ({
+          ...m,
+          name: m.name.trim() || (idx === 0 ? formData.responsibleName.trim() : `Membro ${idx + 1}`),
+        })),
+      };
+
       const res = await fetch(`/api/convite/${inviteCode}`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(formData),
+        body: JSON.stringify(submissionData),
       });
 
       const data = await res.json();
@@ -130,11 +156,11 @@ export default function PublicInvitePage({
           estimatedTotal: estimatedFamilyTotal,
         });
       } else {
-        alert(data.error || "Erro ao confirmar presença");
+        setErrorMessage(data.error || "Erro ao confirmar presença");
       }
       setSubmitting(false);
     } catch {
-      alert("Falha de conexão ao enviar confirmação");
+      setErrorMessage("Falha de conexão ao enviar confirmação. Tente novamente.");
       setSubmitting(false);
     }
   };
@@ -433,7 +459,7 @@ export default function PublicInvitePage({
                   required
                   placeholder="Ex: Carlos Silva"
                   value={formData.responsibleName}
-                  onChange={(e) => setFormData({ ...formData, responsibleName: e.target.value })}
+                  onChange={(e) => handleResponsibleNameChange(e.target.value)}
                   className="w-full px-3 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900/50 text-slate-900 dark:text-white text-sm"
                 />
               </div>
@@ -455,15 +481,19 @@ export default function PublicInvitePage({
 
               <div>
                 <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
-                  Seu E-mail (Opcional)
+                  Seu E-mail *
                 </label>
                 <input
                   type="email"
+                  required
                   placeholder="seuemail@exemplo.com"
                   value={formData.responsibleEmail}
                   onChange={(e) => setFormData({ ...formData, responsibleEmail: e.target.value })}
                   className="w-full px-3 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900/50 text-slate-900 dark:text-white text-sm"
                 />
+                <span className="text-[10px] text-slate-400 mt-1 block">
+                  Obrigatório para confirmação e evitar cadastros duplicados.
+                </span>
               </div>
             </div>
 
@@ -475,7 +505,7 @@ export default function PublicInvitePage({
                     Quem vai com você? ({formData.members.length} pessoa(s))
                   </span>
                   <span className="text-[11px] text-slate-400">
-                    Insira todos os membros (incluindo você e as crianças).
+                    O responsável já está incluído abaixo. Adicione os acompanhantes.
                   </span>
                 </div>
 
@@ -493,75 +523,94 @@ export default function PublicInvitePage({
                 {formData.members.map((member, idx) => {
                   const ageNum = parseInt(member.age) || 0;
                   const isPaying = ageNum >= event.minPayingAge;
+                  const isResponsible = idx === 0;
 
                   return (
                     <div
                       key={idx}
-                      className="p-3 rounded-2xl bg-slate-50 dark:bg-slate-900/60 border border-slate-200 dark:border-slate-800 flex flex-col sm:flex-row sm:items-center gap-2"
+                      className={`p-3 rounded-2xl border ${
+                        isResponsible
+                          ? "bg-emerald-50/40 dark:bg-emerald-950/20 border-emerald-200 dark:border-emerald-900/40"
+                          : "bg-slate-50 dark:bg-slate-900/60 border border-slate-200 dark:border-slate-800"
+                      } flex flex-col gap-2`}
                     >
-                      <input
-                        type="text"
-                        required
-                        placeholder="Nome (ex: Esposa, Filho, etc.)"
-                        value={member.name}
-                        onChange={(e) => {
-                          const updated = [...formData.members];
-                          updated[idx].name = e.target.value;
-                          setFormData({ ...formData, members: updated });
-                        }}
-                        className="flex-1 px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-xs text-slate-900 dark:text-white"
-                      />
+                      {isResponsible && (
+                        <div className="flex items-center justify-between">
+                          <span className="text-[11px] font-bold text-emerald-800 dark:text-emerald-300 flex items-center gap-1.5">
+                            <span className="w-2 h-2 rounded-full bg-emerald-500"></span>
+                            Pessoa 1 (Você / Responsável)
+                          </span>
+                          <span className="text-[10px] text-emerald-600 dark:text-emerald-400 font-medium">
+                            Nome sincronizado automaticamente
+                          </span>
+                        </div>
+                      )}
 
-                      <div className="flex items-center gap-2 w-full sm:w-auto">
+                      <div className="flex flex-col sm:flex-row sm:items-center gap-2">
                         <input
-                          type="number"
+                          type="text"
                           required
-                          min={0}
-                          max={100}
-                          placeholder="Idade"
-                          value={member.age}
+                          placeholder={isResponsible ? "Seu nome completo" : "Nome (ex: Esposa, Filho, etc.)"}
+                          value={isResponsible ? (member.name || formData.responsibleName) : member.name}
                           onChange={(e) => {
                             const updated = [...formData.members];
-                            updated[idx].age = e.target.value;
+                            updated[idx].name = e.target.value;
                             setFormData({ ...formData, members: updated });
                           }}
-                          className="w-16 px-2 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-xs text-center text-slate-900 dark:text-white"
+                          className="flex-1 px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-xs text-slate-900 dark:text-white"
                         />
 
-                        <select
-                          value={member.gender}
-                          onChange={(e) => {
-                            const updated = [...formData.members];
-                            updated[idx].gender = e.target.value;
-                            setFormData({ ...formData, members: updated });
-                          }}
-                          className="flex-1 sm:w-24 px-2 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-xs text-slate-900 dark:text-white"
-                        >
-                          <option value="MALE">Homem</option>
-                          <option value="FEMALE">Mulher</option>
-                          <option value="OTHER">Outro</option>
-                        </select>
+                        <div className="flex items-center gap-2 w-full sm:w-auto">
+                          <input
+                            type="number"
+                            required
+                            min={0}
+                            max={100}
+                            placeholder="Idade"
+                            value={member.age}
+                            onChange={(e) => {
+                              const updated = [...formData.members];
+                              updated[idx].age = e.target.value;
+                              setFormData({ ...formData, members: updated });
+                            }}
+                            className="w-16 px-2 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-xs text-center text-slate-900 dark:text-white"
+                          />
 
-                        <span
-                          className={`text-[10px] font-bold px-2 py-1.5 rounded-md shrink-0 ${
-                            isPaying
-                              ? "bg-blue-100 text-blue-800 dark:bg-blue-950 dark:text-blue-300"
-                              : "bg-slate-200 text-slate-700 dark:bg-slate-800 dark:text-slate-300"
-                          }`}
-                        >
-                          {isPaying ? "Pagante" : "Isento"}
-                        </span>
-
-                        {formData.members.length > 1 && (
-                          <button
-                            type="button"
-                            onClick={() => handleRemoveMember(idx)}
-                            className="p-1.5 text-slate-400 hover:text-rose-500 rounded-lg hover:bg-rose-50 dark:hover:bg-rose-950/40 shrink-0"
-                            title="Remover pessoa"
+                          <select
+                            value={member.gender}
+                            onChange={(e) => {
+                              const updated = [...formData.members];
+                              updated[idx].gender = e.target.value;
+                              setFormData({ ...formData, members: updated });
+                            }}
+                            className="flex-1 sm:w-24 px-2 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-xs text-slate-900 dark:text-white"
                           >
-                            <Trash2 className="w-4 h-4" />
-                          </button>
-                        )}
+                            <option value="MALE">Homem</option>
+                            <option value="FEMALE">Mulher</option>
+                            <option value="OTHER">Outro</option>
+                          </select>
+
+                          <span
+                            className={`text-[10px] font-bold px-2 py-1.5 rounded-md shrink-0 ${
+                              isPaying
+                                ? "bg-blue-100 text-blue-800 dark:bg-blue-950 dark:text-blue-300"
+                                : "bg-slate-200 text-slate-700 dark:bg-slate-800 dark:text-slate-300"
+                            }`}
+                          >
+                            {isPaying ? "Pagante" : "Isento"}
+                          </span>
+
+                          {!isResponsible && (
+                            <button
+                              type="button"
+                              onClick={() => handleRemoveMember(idx)}
+                              className="p-1.5 text-slate-400 hover:text-rose-500 rounded-lg hover:bg-rose-50 dark:hover:bg-rose-950/40 shrink-0"
+                              title="Remover pessoa"
+                            >
+                              <Trash2 className="w-4 h-4" />
+                            </button>
+                          )}
+                        </div>
                       </div>
                     </div>
                   );
@@ -619,6 +668,13 @@ export default function PublicInvitePage({
                 </div>
               )}
             </div>
+
+            {errorMessage && (
+              <div className="p-4 rounded-2xl bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-900/60 flex items-start gap-3 text-rose-700 dark:text-rose-300 text-xs">
+                <AlertCircle className="w-5 h-5 shrink-0 mt-0.5 text-rose-600 dark:text-rose-400" />
+                <span className="leading-relaxed font-medium">{errorMessage}</span>
+              </div>
+            )}
 
             <button
               type="submit"

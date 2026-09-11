@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { Navbar } from "@/components/navbar";
@@ -31,6 +31,16 @@ export default function NewEventPage() {
   const router = useRouter();
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+
+  useEffect(() => {
+    fetch("/api/auth/me")
+      .then((res) => {
+        if (res.status === 401) {
+          router.push("/login?from=/eventos/novo");
+        }
+      })
+      .catch(() => {});
+  }, [router]);
 
   // Modo de criação: "QUICK" (Modo Rápido) vs "DETAILED" (Modo Completo)
   const [mode, setMode] = useState<"QUICK" | "DETAILED">("QUICK");

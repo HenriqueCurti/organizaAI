@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState, use } from "react";
+import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { Navbar } from "@/components/navbar";
 import {
@@ -113,6 +114,7 @@ interface EventDetail {
   pixKey: string | null;
   pixKeyType: string | null;
   pixReceiverName: string | null;
+  pixCity?: string | null;
   totalCosts: number;
   totalPayingParticipants: number;
   totalExemptParticipants: number;
@@ -129,6 +131,7 @@ export default function EventDetailPage({
   params: Promise<{ id: string }>;
 }) {
   const { id } = use(params);
+  const router = useRouter();
   const [event, setEvent] = useState<EventDetail | null>(null);
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState<"rateio" | "custos" | "churrasco" | "pix" | "organizadores">("rateio");
@@ -144,10 +147,12 @@ export default function EventDetailPage({
 
   // Modais de Famílias
   const [showAddFamily, setShowAddFamily] = useState(false);
+  const [familyModalError, setFamilyModalError] = useState<string | null>(null);
   const [newFamily, setNewFamily] = useState({
     familyName: "",
     responsibleName: "",
     responsiblePhone: "",
+    responsibleEmail: "",
     members: [{ name: "", gender: "MALE", age: "30" }],
   });
   const [editingFamily, setEditingFamily] = useState<{
@@ -157,6 +162,18 @@ export default function EventDetailPage({
     responsiblePhone: string;
     members: { name: string; gender: string; age: string }[];
   } | null>(null);
+
+  // Modal de Edição das Configurações Pix do Evento
+  const [showEditPixConfig, setShowEditPixConfig] = useState(false);
+  const [pixConfigForm, setPixConfigForm] = useState({
+    pixKeyType: "CPF",
+    pixKey: "",
+    pixReceiverName: "",
+    pixCity: "BRASILIA",
+  });
+  const [savingPixConfig, setSavingPixConfig] = useState(false);
+  const [pixConfigError, setPixConfigError] = useState<string | null>(null);
+  const [pixConfigSuccess, setPixConfigSuccess] = useState(false);
 
   // Modal Pix Específico de Família
   const [pixModalData, setPixModalData] = useState<{
@@ -204,6 +221,10 @@ export default function EventDetailPage({
   const fetchEvent = async () => {
     try {
       const res = await fetch(`/api/eventos/${id}`);
+      if (res.status === 401) {
+        router.push(`/login?from=/eventos/${id}`);
+        return;
+      }
       const data = await res.json();
       if (res.ok) {
         setEvent(data.event);
@@ -503,18 +524,48 @@ export default function EventDetailPage({
     }
   };
 
+  const handleNewFamilyResponsibleNameChange = (val: string) => {
+    const updatedMembers = [...newFamily.members];
+    if (updatedMembers.length > 0) {
+      if (!updatedMembers[0].name || updatedMembers[0].name === newFamily.responsibleName) {
+        updatedMembers[0] = { ...updatedMembers[0], name: val };
+      }
+    }
+    setNewFamily({
+      ...newFamily,
+      responsibleName: val,
+      members: updatedMembers,
+    });
+  };
+
   const handleSaveFamily = async (e: React.FormEvent) => {
     e.preventDefault();
+    setFamilyModalError(null);
     try {
-      await fetch(`/api/eventos/${id}/familias`, {
+      const payload = {
+        ...newFamily,
+        responsibleEmail: newFamily.responsibleEmail.trim() || undefined,
+        members: newFamily.members.map((m, idx) => ({
+          ...m,
+          name: m.name.trim() || (idx === 0 ? newFamily.responsibleName.trim() : `Membro ${idx + 1}`),
+        })),
+      };
+
+      const res = await fetch(`/api/eventos/${id}/familias`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(newFamily),
+        body: JSON.stringify(payload),
       });
+      const data = await res.json();
+      if (!res.ok) {
+        setFamilyModalError(data.error || "Erro ao adicionar família");
+        return;
+      }
       setNewFamily({
         familyName: "",
         responsibleName: "",
         responsiblePhone: "",
+        responsibleEmail: "",
         members: [{ name: "", gender: "MALE", age: "30" }],
       });
       setShowAddFamily(false);
@@ -522,6 +573,53 @@ export default function EventDetailPage({
       fetchBbq();
     } catch (e) {
       console.error(e);
+      setFamilyModalError("Falha de conexão com o servidor ao salvar família.");
+    }
+  };
+
+  const handleOpenEditPixConfig = () => {
+    setPixConfigForm({
+      pixKeyType: event?.pixKeyType || "CPF",
+      pixKey: event?.pixKey || "",
+      pixReceiverName: event?.pixReceiverName || "",
+      pixCity: (event as any)?.pixCity || "BRASILIA",
+    });
+    setPixConfigError(null);
+    setPixConfigSuccess(false);
+    setShowEditPixConfig(true);
+  };
+
+  const handleSavePixConfig = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setSavingPixConfig(true);
+    setPixConfigError(null);
+    try {
+      const res = await fetch(`/api/eventos/${id}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          pixKeyType: pixConfigForm.pixKeyType,
+          pixKey: pixConfigForm.pixKey.trim(),
+          pixReceiverName: pixConfigForm.pixReceiverName.trim(),
+          pixCity: pixConfigForm.pixCity.trim() || "BRASILIA",
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        setPixConfigError(data.error || "Erro ao atualizar configurações do Pix");
+        setSavingPixConfig(false);
+        return;
+      }
+      setPixConfigSuccess(true);
+      setTimeout(() => {
+        setShowEditPixConfig(false);
+        setPixConfigSuccess(false);
+      }, 800);
+      fetchEvent();
+    } catch {
+      setPixConfigError("Falha de comunicação com o servidor.");
+    } finally {
+      setSavingPixConfig(false);
     }
   };
 
@@ -1819,29 +1917,81 @@ export default function EventDetailPage({
               )}
 
               {event.pixKey ? (
-                <div className="p-4 rounded-2xl bg-slate-50 dark:bg-slate-900/80 border border-slate-200 dark:border-slate-800 text-left space-y-3">
-                  <div className="flex justify-between text-xs">
-                    <span className="text-slate-400">Tipo de Chave:</span>
-                    <span className="font-semibold text-slate-800 dark:text-slate-200">
-                      {event.pixKeyType || "Pix"}
-                    </span>
+                <div className="space-y-4">
+                  <div className="p-4 rounded-2xl bg-slate-50 dark:bg-slate-900/80 border border-slate-200 dark:border-slate-800 text-left space-y-3">
+                    <div className="flex items-center justify-between pb-2 border-b border-slate-200/60 dark:border-slate-800">
+                      <span className="text-xs font-bold text-slate-700 dark:text-slate-300">
+                        Chave Cadastrada
+                      </span>
+                      {event.canEdit && (
+                        <button
+                          type="button"
+                          onClick={handleOpenEditPixConfig}
+                          className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-semibold text-emerald-600 dark:text-emerald-400 hover:bg-emerald-50 dark:hover:bg-emerald-950/40 transition-colors"
+                        >
+                          <Pencil className="w-3.5 h-3.5" />
+                          <span>Editar</span>
+                        </button>
+                      )}
+                    </div>
+                    <div className="flex justify-between text-xs">
+                      <span className="text-slate-400">Tipo de Chave:</span>
+                      <span className="font-semibold text-slate-800 dark:text-slate-200">
+                        {event.pixKeyType || "Pix"}
+                      </span>
+                    </div>
+                    <div className="flex justify-between items-center text-xs">
+                      <span className="text-slate-400">Chave Pix:</span>
+                      <span className="font-mono font-bold text-slate-900 dark:text-white text-sm">
+                        {event.pixKey}
+                      </span>
+                    </div>
+                    <div className="flex justify-between text-xs">
+                      <span className="text-slate-400">Titular da Conta:</span>
+                      <span className="font-semibold text-slate-800 dark:text-slate-200">
+                        {event.pixReceiverName || "Organizador"}
+                      </span>
+                    </div>
+                    <div className="flex justify-between text-xs">
+                      <span className="text-slate-400">Cidade:</span>
+                      <span className="font-semibold text-slate-800 dark:text-slate-200">
+                        {event.pixCity || "BRASILIA"}
+                      </span>
+                    </div>
                   </div>
-                  <div className="flex justify-between items-center text-xs">
-                    <span className="text-slate-400">Chave Pix:</span>
-                    <span className="font-mono font-bold text-slate-900 dark:text-white text-sm">
-                      {event.pixKey}
-                    </span>
-                  </div>
-                  <div className="flex justify-between text-xs">
-                    <span className="text-slate-400">Titular da Conta:</span>
-                    <span className="font-semibold text-slate-800 dark:text-slate-200">
-                      {event.pixReceiverName || "Organizador"}
-                    </span>
-                  </div>
+
+                  {event.canEdit && (
+                    <div className="flex justify-center">
+                      <button
+                        type="button"
+                        onClick={handleOpenEditPixConfig}
+                        className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs font-semibold bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 transition-colors shadow-sm"
+                      >
+                        <Pencil className="w-3.5 h-3.5 text-emerald-500" />
+                        <span>Alterar Configurações do Pix</span>
+                      </button>
+                    </div>
+                  )}
                 </div>
               ) : (
-                <div className="p-4 rounded-2xl bg-amber-50 dark:bg-amber-950/40 text-amber-800 dark:text-amber-300 text-xs">
-                  Nenhuma chave Pix cadastrada para este evento.
+                <div className="p-5 rounded-2xl bg-amber-50 dark:bg-amber-950/40 border border-amber-200/60 dark:border-amber-900/40 text-left space-y-3">
+                  <div className="flex items-center gap-2 text-xs font-bold text-amber-800 dark:text-amber-300">
+                    <AlertCircle className="w-4 h-4 shrink-0 text-amber-600 dark:text-amber-400" />
+                    <span>Nenhuma chave Pix cadastrada para este evento.</span>
+                  </div>
+                  <p className="text-xs text-amber-700 dark:text-amber-300/80 leading-relaxed">
+                    Cadastre a chave Pix onde os participantes deverão realizar o pagamento do rateio.
+                  </p>
+                  {event.canEdit && (
+                    <button
+                      type="button"
+                      onClick={handleOpenEditPixConfig}
+                      className="inline-flex items-center gap-1.5 px-4 py-2.5 rounded-xl text-xs font-bold bg-emerald-600 hover:bg-emerald-700 text-white shadow-sm transition-colors"
+                    >
+                      <Plus className="w-4 h-4" />
+                      <span>Cadastrar Chave Pix Agora</span>
+                    </button>
+                  )}
                 </div>
               )}
 
@@ -2219,13 +2369,30 @@ export default function EventDetailPage({
             ======================================================== */}
         {showAddFamily && (
           <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-black/60 backdrop-blur-sm overflow-y-auto">
-            <div className="bg-white dark:bg-[#0f172a] rounded-3xl border border-slate-200 dark:border-slate-800 p-5 sm:p-6 max-w-lg w-full shadow-2xl my-auto max-h-[90vh] overflow-y-auto">
-              <h3 className="text-lg font-bold text-slate-900 dark:text-white mb-2">
-                Adicionar Família Manualmente
-              </h3>
-              <p className="text-xs text-slate-500 dark:text-slate-400 mb-4">
-                Cadastre a família e seus membros. O sistema aplicará a regra de isenção ({event.minPayingAge}+ anos).
+            <div className="bg-white dark:bg-[#0f172a] rounded-3xl border border-slate-200 dark:border-slate-800 p-5 sm:p-6 max-w-lg w-full shadow-2xl my-auto max-h-[90vh] overflow-y-auto space-y-4">
+              <div className="flex items-center justify-between">
+                <h3 className="text-lg font-bold text-slate-900 dark:text-white">
+                  Adicionar Família Manualmente
+                </h3>
+                <button
+                  type="button"
+                  onClick={() => setShowAddFamily(false)}
+                  className="p-1.5 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 rounded-lg"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+
+              <p className="text-xs text-slate-500 dark:text-slate-400">
+                Cadastre a família e seus membros. O responsável é incluído automaticamente como participante.
               </p>
+
+              {familyModalError && (
+                <div className="p-3 rounded-xl bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-900/60 text-rose-700 dark:text-rose-300 text-xs flex items-center gap-2">
+                  <AlertCircle className="w-4 h-4 shrink-0" />
+                  <span>{familyModalError}</span>
+                </div>
+              )}
 
               <form onSubmit={handleSaveFamily} className="space-y-4">
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
@@ -2252,23 +2419,38 @@ export default function EventDetailPage({
                       required
                       placeholder="Ex: Carlos Curti"
                       value={newFamily.responsibleName}
-                      onChange={(e) => setNewFamily({ ...newFamily, responsibleName: e.target.value })}
+                      onChange={(e) => handleNewFamilyResponsibleNameChange(e.target.value)}
                       className="w-full px-3 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-900 dark:text-white text-sm"
                     />
                   </div>
                 </div>
 
-                <div>
-                  <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
-                    WhatsApp do Responsável
-                  </label>
-                  <input
-                    type="text"
-                    placeholder="(11) 99999-8888"
-                    value={newFamily.responsiblePhone}
-                    onChange={(e) => setNewFamily({ ...newFamily, responsiblePhone: e.target.value })}
-                    className="w-full px-3 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-900 dark:text-white text-sm"
-                  />
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                      WhatsApp do Responsável
+                    </label>
+                    <input
+                      type="text"
+                      placeholder="(11) 99999-8888"
+                      value={newFamily.responsiblePhone}
+                      onChange={(e) => setNewFamily({ ...newFamily, responsiblePhone: e.target.value })}
+                      className="w-full px-3 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-900 dark:text-white text-sm"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                      E-mail do Responsável (Opcional)
+                    </label>
+                    <input
+                      type="email"
+                      placeholder="carlos@exemplo.com"
+                      value={newFamily.responsibleEmail}
+                      onChange={(e) => setNewFamily({ ...newFamily, responsibleEmail: e.target.value })}
+                      className="w-full px-3 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-900 dark:text-white text-sm"
+                    />
+                  </div>
                 </div>
 
                 {/* Participantes da Família */}
@@ -2293,69 +2475,89 @@ export default function EventDetailPage({
                   </div>
 
                   <div className="space-y-2.5 max-h-52 overflow-y-auto pr-1">
-                    {newFamily.members.map((member, idx) => (
-                      <div
-                        key={idx}
-                        className="p-2.5 rounded-xl bg-slate-50 dark:bg-slate-900/60 border border-slate-200/60 dark:border-slate-800 space-y-2"
-                      >
-                        <input
-                          type="text"
-                          required
-                          placeholder="Nome do membro"
-                          value={member.name}
-                          onChange={(e) => {
-                            const updated = [...newFamily.members];
-                            updated[idx].name = e.target.value;
-                            setNewFamily({ ...newFamily, members: updated });
-                          }}
-                          className="w-full px-3 py-2 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-xs text-slate-900 dark:text-white"
-                        />
-                        <div className="flex items-center gap-2">
-                          <input
-                            type="number"
-                            required
-                            min={0}
-                            max={100}
-                            placeholder="Idade"
-                            value={member.age}
-                            onChange={(e) => {
-                              const updated = [...newFamily.members];
-                              updated[idx].age = e.target.value;
-                              setNewFamily({ ...newFamily, members: updated });
-                            }}
-                            className="w-20 px-2 py-2 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-xs text-center text-slate-900 dark:text-white"
-                          />
-                          <select
-                            value={member.gender}
-                            onChange={(e) => {
-                              const updated = [...newFamily.members];
-                              updated[idx].gender = e.target.value;
-                              setNewFamily({ ...newFamily, members: updated });
-                            }}
-                            className="flex-1 px-2 py-2 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-xs text-slate-900 dark:text-white"
-                          >
-                            <option value="MALE">Homem</option>
-                            <option value="FEMALE">Mulher</option>
-                            <option value="OTHER">Outro</option>
-                          </select>
-                          {newFamily.members.length > 1 && (
-                            <button
-                              type="button"
-                              onClick={() =>
-                                setNewFamily({
-                                  ...newFamily,
-                                  members: newFamily.members.filter((_, i) => i !== idx),
-                                })
-                              }
-                              className="p-2 text-slate-400 hover:text-rose-500 rounded-lg hover:bg-rose-50 dark:hover:bg-rose-950/40"
-                              title="Remover membro"
-                            >
-                              <Trash2 className="w-4 h-4" />
-                            </button>
+                    {newFamily.members.map((member, idx) => {
+                      const isResponsible = idx === 0;
+
+                      return (
+                        <div
+                          key={idx}
+                          className={`p-2.5 rounded-xl border space-y-2 ${
+                            isResponsible
+                              ? "bg-emerald-50/40 dark:bg-emerald-950/20 border-emerald-200 dark:border-emerald-900/40"
+                              : "bg-slate-50 dark:bg-slate-900/60 border border-slate-200/60 dark:border-slate-800"
+                          }`}
+                        >
+                          {isResponsible && (
+                            <div className="flex items-center justify-between pb-0.5">
+                              <span className="text-[11px] font-bold text-emerald-800 dark:text-emerald-300 flex items-center gap-1.5">
+                                <span className="w-2 h-2 rounded-full bg-emerald-500"></span>
+                                Membro 1 (Responsável)
+                              </span>
+                              <span className="text-[10px] text-emerald-600 dark:text-emerald-400 font-medium">
+                                Preenchido com o responsável
+                              </span>
+                            </div>
                           )}
+
+                          <input
+                            type="text"
+                            required
+                            placeholder={isResponsible ? "Nome do responsável" : "Nome do membro"}
+                            value={isResponsible ? (member.name || newFamily.responsibleName) : member.name}
+                            onChange={(e) => {
+                              const updated = [...newFamily.members];
+                              updated[idx].name = e.target.value;
+                              setNewFamily({ ...newFamily, members: updated });
+                            }}
+                            className="w-full px-3 py-2 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-xs text-slate-900 dark:text-white"
+                          />
+                          <div className="flex items-center gap-2">
+                            <input
+                              type="number"
+                              required
+                              min={0}
+                              max={100}
+                              placeholder="Idade"
+                              value={member.age}
+                              onChange={(e) => {
+                                const updated = [...newFamily.members];
+                                updated[idx].age = e.target.value;
+                                setNewFamily({ ...newFamily, members: updated });
+                              }}
+                              className="w-20 px-2 py-2 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-xs text-center text-slate-900 dark:text-white"
+                            />
+                            <select
+                              value={member.gender}
+                              onChange={(e) => {
+                                const updated = [...newFamily.members];
+                                updated[idx].gender = e.target.value;
+                                setNewFamily({ ...newFamily, members: updated });
+                              }}
+                              className="flex-1 px-2 py-2 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-xs text-slate-900 dark:text-white"
+                            >
+                              <option value="MALE">Homem</option>
+                              <option value="FEMALE">Mulher</option>
+                              <option value="OTHER">Outro</option>
+                            </select>
+                            {!isResponsible && newFamily.members.length > 1 && (
+                              <button
+                                type="button"
+                                onClick={() =>
+                                  setNewFamily({
+                                    ...newFamily,
+                                    members: newFamily.members.filter((_, i) => i !== idx),
+                                  })
+                                }
+                                className="p-2 text-slate-400 hover:text-rose-500 rounded-lg hover:bg-rose-50 dark:hover:bg-rose-950/40"
+                                title="Remover membro"
+                              >
+                                <Trash2 className="w-4 h-4" />
+                              </button>
+                            )}
+                          </div>
                         </div>
-                      </div>
-                    ))}
+                      );
+                    })}
                   </div>
                 </div>
 
@@ -2372,6 +2574,139 @@ export default function EventDetailPage({
                     className="px-4 py-2.5 rounded-xl text-xs font-semibold bg-emerald-600 hover:bg-emerald-700 text-white shadow-sm"
                   >
                     Salvar Família
+                  </button>
+                </div>
+              </form>
+            </div>
+          </div>
+        )}
+
+        {/* ========================================================
+            MODAL: CONFIGURAÇÕES DO PIX (NOVO)
+            ======================================================== */}
+        {showEditPixConfig && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-black/60 backdrop-blur-sm overflow-y-auto">
+            <div className="bg-white dark:bg-[#0f172a] rounded-3xl border border-slate-200 dark:border-slate-800 p-5 sm:p-6 max-w-md w-full shadow-2xl my-auto max-h-[90vh] overflow-y-auto space-y-4">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <div className="p-2 rounded-xl bg-emerald-50 dark:bg-emerald-950/50 text-emerald-600 dark:text-emerald-400">
+                    <QrCode className="w-5 h-5" />
+                  </div>
+                  <h3 className="text-base sm:text-lg font-bold text-slate-900 dark:text-white">
+                    Configurações do Pix
+                  </h3>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setShowEditPixConfig(false)}
+                  className="p-1.5 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 rounded-lg"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+
+              <p className="text-xs text-slate-500 dark:text-slate-400 leading-relaxed">
+                Configure a chave Pix e titular da conta para o recebimento dos valores de rateio.
+              </p>
+
+              {pixConfigError && (
+                <div className="p-3 rounded-xl bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-900/60 text-rose-700 dark:text-rose-300 text-xs flex items-center gap-2">
+                  <AlertCircle className="w-4 h-4 shrink-0" />
+                  <span>{pixConfigError}</span>
+                </div>
+              )}
+
+              {pixConfigSuccess && (
+                <div className="p-3 rounded-xl bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-900/60 text-emerald-700 dark:text-emerald-300 text-xs flex items-center gap-2">
+                  <CheckCircle2 className="w-4 h-4 shrink-0" />
+                  <span>Dados do Pix salvos com sucesso!</span>
+                </div>
+              )}
+
+              <form onSubmit={handleSavePixConfig} className="space-y-4">
+                <div>
+                  <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                    Tipo de Chave Pix *
+                  </label>
+                  <select
+                    value={pixConfigForm.pixKeyType}
+                    onChange={(e) => setPixConfigForm({ ...pixConfigForm, pixKeyType: e.target.value })}
+                    className="w-full px-3 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-900 dark:text-white text-sm"
+                  >
+                    <option value="CPF">CPF</option>
+                    <option value="CNPJ">CNPJ</option>
+                    <option value="EMAIL">E-mail</option>
+                    <option value="PHONE">Telefone / Celular</option>
+                    <option value="RANDOM">Chave Aleatória (EVP)</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                    Chave Pix *
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    placeholder={
+                      pixConfigForm.pixKeyType === "CPF"
+                        ? "000.000.000-00"
+                        : pixConfigForm.pixKeyType === "PHONE"
+                        ? "(11) 99999-8888"
+                        : pixConfigForm.pixKeyType === "EMAIL"
+                        ? "seuemail@pix.com"
+                        : "Chave Pix"
+                    }
+                    value={pixConfigForm.pixKey}
+                    onChange={(e) => setPixConfigForm({ ...pixConfigForm, pixKey: e.target.value })}
+                    className="w-full px-3 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-900 dark:text-white text-sm"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                    Nome do Titular da Conta (Recebedor) *
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    placeholder="Nome completo do recebedor"
+                    value={pixConfigForm.pixReceiverName}
+                    onChange={(e) => setPixConfigForm({ ...pixConfigForm, pixReceiverName: e.target.value })}
+                    className="w-full px-3 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-900 dark:text-white text-sm"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                    Cidade do Titular
+                  </label>
+                  <input
+                    type="text"
+                    placeholder="Ex: BRASILIA"
+                    value={pixConfigForm.pixCity}
+                    onChange={(e) => setPixConfigForm({ ...pixConfigForm, pixCity: e.target.value })}
+                    className="w-full px-3 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-900 dark:text-white text-sm"
+                  />
+                  <span className="text-[11px] text-slate-400 mt-1 block">
+                    Padrão: BRASILIA (exigido pelo BACEN na geração do QR Code Pix).
+                  </span>
+                </div>
+
+                <div className="flex items-center justify-end gap-3 pt-3 border-t border-slate-100 dark:border-slate-800">
+                  <button
+                    type="button"
+                    onClick={() => setShowEditPixConfig(false)}
+                    className="px-4 py-2.5 rounded-xl text-xs font-semibold text-slate-500 hover:text-slate-800 dark:hover:text-slate-200"
+                  >
+                    Cancelar
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={savingPixConfig}
+                    className="px-5 py-2.5 rounded-xl text-xs font-semibold bg-emerald-600 hover:bg-emerald-700 text-white shadow-sm disabled:opacity-50 flex items-center gap-2"
+                  >
+                    {savingPixConfig ? "Salvando..." : "Salvar Configurações Pix"}
                   </button>
                 </div>
               </form>

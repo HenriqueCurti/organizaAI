@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { Navbar } from "@/components/navbar";
 import {
@@ -34,19 +35,27 @@ interface EventItem {
 }
 
 export default function DashboardPage() {
+  const router = useRouter();
   const [events, setEvents] = useState<EventItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [copiedCode, setCopiedCode] = useState<string | null>(null);
 
   useEffect(() => {
     fetch("/api/eventos")
-      .then((res) => res.json())
+      .then((res) => {
+        if (res.status === 401) {
+          router.push("/login?from=/dashboard");
+          return null;
+        }
+        return res.json();
+      })
       .then((data) => {
+        if (!data) return;
         setEvents(data.events || []);
         setLoading(false);
       })
       .catch(() => setLoading(false));
-  }, []);
+  }, [router]);
 
   const copyInviteLink = (inviteCode: string, e: React.MouseEvent) => {
     e.preventDefault();
