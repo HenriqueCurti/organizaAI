@@ -58,6 +58,9 @@ export async function getCurrentUser() {
 
     return user;
   } catch (err) {
+    if ((err as any)?.digest === "DYNAMIC_SERVER_USAGE") {
+      throw err;
+    }
     console.error("getCurrentUser error:", err);
     return null;
   }

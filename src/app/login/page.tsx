@@ -38,7 +38,7 @@ function LoginForm() {
 
       // Redireciona para a rota requisitada ou para o dashboard
       const destination =
-        from && from.startsWith("/") && !from.startsWith("//")
+        from && from.startsWith("/") && !from.startsWith("//") && from !== "/"
           ? from
           : "/dashboard";
 

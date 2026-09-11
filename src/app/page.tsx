@@ -1,4 +1,6 @@
 import Link from "next/link";
+import { redirect } from "next/navigation";
+import { getCurrentUser } from "@/lib/auth";
 import { Navbar } from "@/components/navbar";
 import {
   Flame,
@@ -13,7 +15,12 @@ import {
   ShieldCheck,
 } from "lucide-react";
 
-export default function LandingPage() {
+export default async function LandingPage() {
+  const user = await getCurrentUser();
+  if (user) {
+    redirect("/dashboard");
+  }
+
   return (
     <div className="min-h-screen flex flex-col bg-slate-50 dark:bg-[#080d1a]">
       <Navbar />

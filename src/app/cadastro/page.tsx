@@ -38,7 +38,7 @@ function RegisterForm() {
       }
 
       const destination =
-        from && from.startsWith("/") && !from.startsWith("//")
+        from && from.startsWith("/") && !from.startsWith("//") && from !== "/"
           ? from
           : "/dashboard";
 

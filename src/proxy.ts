@@ -40,8 +40,8 @@ export async function proxy(request: NextRequest) {
     return NextResponse.redirect(redirectUrl);
   }
 
-  // Se o usuário já está autenticado e acessa telas de login ou cadastro
-  if (isAuthenticated && (pathname === "/login" || pathname === "/cadastro")) {
+  // Se o usuário já está autenticado e acessa telas de login, cadastro ou a landing page raiz (/)
+  if (isAuthenticated && (pathname === "/" || pathname === "/login" || pathname === "/cadastro")) {
     return NextResponse.redirect(new URL("/dashboard", request.url));
   }
 
