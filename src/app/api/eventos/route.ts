@@ -33,9 +33,10 @@ export async function GET() {
 
   const now = new Date();
 
-  // Buscar eventos criados pelo usuário ou onde ele é membro
+  // Buscar eventos ativos criados pelo usuário ou onde ele é membro
   const events = await prisma.event.findMany({
     where: {
+      deletedAt: null,
       OR: [
         { creatorId: user.id },
         { members: { some: { userId: user.id } } },

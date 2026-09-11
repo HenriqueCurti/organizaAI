@@ -21,7 +21,7 @@ export async function GET(
     },
   });
 
-  if (!event) {
+  if (!event || event.deletedAt) {
     return NextResponse.json({ error: "Evento não encontrado" }, { status: 404 });
   }
 

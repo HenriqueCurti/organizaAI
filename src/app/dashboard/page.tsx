@@ -15,7 +15,10 @@ import {
   ChevronRight,
   Sparkles,
   Clock,
+  Trash2,
+  X,
 } from "lucide-react";
+import { ConfirmDeleteModal } from "@/components/confirm-delete-modal";
 
 interface EventItem {
   id: string;
@@ -39,6 +42,9 @@ export default function DashboardPage() {
   const [events, setEvents] = useState<EventItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [copiedCode, setCopiedCode] = useState<string | null>(null);
+  const [eventToDelete, setEventToDelete] = useState<EventItem | null>(null);
+  const [deleteLoading, setDeleteLoading] = useState(false);
+  const [toastMessage, setToastMessage] = useState<string | null>(null);
 
   useEffect(() => {
     fetch("/api/eventos")
@@ -56,6 +62,34 @@ export default function DashboardPage() {
       })
       .catch(() => setLoading(false));
   }, [router]);
+
+  const handleDeleteRequest = (event: EventItem, e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setEventToDelete(event);
+  };
+
+  const handleConfirmDelete = async () => {
+    if (!eventToDelete) return;
+    setDeleteLoading(true);
+    try {
+      const res = await fetch(`/api/eventos/${eventToDelete.id}`, {
+        method: "DELETE",
+      });
+      if (!res.ok) {
+        const data = await res.json();
+        throw new Error(data.error || "Erro ao excluir evento");
+      }
+      setEvents((prev) => prev.filter((e) => e.id !== eventToDelete.id));
+      setEventToDelete(null);
+      setToastMessage("Evento excluído com sucesso!");
+      setTimeout(() => setToastMessage(null), 3000);
+    } catch (err: any) {
+      alert(err.message || "Erro ao excluir evento");
+    } finally {
+      setDeleteLoading(false);
+    }
+  };
 
   const copyInviteLink = (inviteCode: string, e: React.MouseEvent) => {
     e.preventDefault();
@@ -109,6 +143,20 @@ export default function DashboardPage() {
           </Link>
         </div>
 
+        {/* Toast Feedback */}
+        {toastMessage && (
+          <div className="mb-6 p-4 rounded-2xl bg-emerald-50 dark:bg-emerald-950/50 border border-emerald-200 dark:border-emerald-800 text-emerald-800 dark:text-emerald-300 text-sm font-semibold flex items-center justify-between shadow-sm animate-in fade-in duration-200">
+            <span>{toastMessage}</span>
+            <button
+              onClick={() => setToastMessage(null)}
+              className="text-emerald-600 dark:text-emerald-400 hover:text-emerald-800 p-1.5 rounded-lg"
+              title="Fechar"
+            >
+              <X className="w-4 h-4" />
+            </button>
+          </div>
+        )}
+
         {loading ? (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
             {[1, 2, 3].map((i) => (
@@ -157,6 +205,7 @@ export default function DashboardPage() {
                       copiedCode={copiedCode}
                       onCopyInvite={copyInviteLink}
                       formatDateRange={formatDateRange}
+                      onDelete={handleDeleteRequest}
                     />
                   ))}
                 </div>
@@ -181,6 +230,7 @@ export default function DashboardPage() {
                       copiedCode={copiedCode}
                       onCopyInvite={copyInviteLink}
                       formatDateRange={formatDateRange}
+                      onDelete={handleDeleteRequest}
                     />
                   ))}
                 </div>
@@ -189,6 +239,14 @@ export default function DashboardPage() {
           </div>
         )}
       </main>
+
+      <ConfirmDeleteModal
+        isOpen={Boolean(eventToDelete)}
+        onClose={() => setEventToDelete(null)}
+        onConfirm={handleConfirmDelete}
+        eventTitle={eventToDelete?.title || ""}
+        isDeleting={deleteLoading}
+      />
     </div>
   );
 }
@@ -198,11 +256,13 @@ function EventCard({
   copiedCode,
   onCopyInvite,
   formatDateRange,
+  onDelete,
 }: {
   event: EventItem;
   copiedCode: string | null;
   onCopyInvite: (code: string, e: React.MouseEvent) => void;
   formatDateRange: (s: string, e: string) => string;
+  onDelete: (event: EventItem, e: React.MouseEvent) => void;
 }) {
   return (
     <Link
@@ -221,9 +281,22 @@ function EventCard({
             {event.isPast ? "Finalizado" : "Confirmado"}
           </span>
 
-          <span className="text-xs text-slate-400 font-medium">
-            {event.isOwner ? "Criado por você" : "Participando"}
-          </span>
+          <div className="flex items-center gap-2">
+            <span className="text-xs text-slate-400 font-medium">
+              {event.isOwner ? "Criado por você" : "Participando"}
+            </span>
+
+            {event.isOwner && (
+              <button
+                type="button"
+                onClick={(e) => onDelete(event, e)}
+                title="Excluir evento"
+                className="p-1.5 text-slate-400 hover:text-rose-600 dark:hover:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-950/50 rounded-lg transition-colors min-h-[36px] min-w-[36px] flex items-center justify-center"
+              >
+                <Trash2 className="w-4 h-4" />
+              </button>
+            )}
+          </div>
         </div>
 
         <h3 className="text-lg font-bold text-slate-900 dark:text-white group-hover:text-emerald-600 dark:group-hover:text-emerald-400 transition-colors line-clamp-1">

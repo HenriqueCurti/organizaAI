@@ -44,6 +44,7 @@ export async function GET(
       pixKey: true,
       pixKeyType: true,
       pixReceiverName: true,
+      deletedAt: true,
       creator: {
         select: {
           name: true,
@@ -66,7 +67,7 @@ export async function GET(
     },
   });
 
-  if (!event) {
+  if (!event || event.deletedAt) {
     return NextResponse.json({ error: "Convite inválido ou evento não encontrado" }, { status: 404 });
   }
 
@@ -123,7 +124,7 @@ export async function POST(
     where: { inviteCode },
   });
 
-  if (!event) {
+  if (!event || event.deletedAt) {
     return NextResponse.json({ error: "Evento não encontrado" }, { status: 404 });
   }
 

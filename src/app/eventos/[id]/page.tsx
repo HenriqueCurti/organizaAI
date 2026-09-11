@@ -34,6 +34,7 @@ import {
   Lock,
   Unlock,
 } from "lucide-react";
+import { ConfirmDeleteModal } from "@/components/confirm-delete-modal";
 
 interface Member {
   id: string;
@@ -139,6 +140,8 @@ export default function EventDetailPage({
   const [copiedPix, setCopiedPix] = useState(false);
   const [statusLoading, setStatusLoading] = useState(false);
   const [copiedCobranca, setCopiedCobranca] = useState(false);
+  const [showDeleteModal, setShowDeleteModal] = useState(false);
+  const [deleteLoading, setDeleteLoading] = useState(false);
 
   // Modais de Custos
   const [showAddCost, setShowAddCost] = useState(false);
@@ -300,6 +303,24 @@ export default function EventDetailPage({
       alert("Falha de conexão com o servidor");
     } finally {
       setStatusLoading(false);
+    }
+  };
+
+  const handleDeleteEvent = async () => {
+    if (!event) return;
+    setDeleteLoading(true);
+    try {
+      const res = await fetch(`/api/eventos/${id}`, {
+        method: "DELETE",
+      });
+      if (!res.ok) {
+        const data = await res.json();
+        throw new Error(data.error || "Erro ao excluir evento");
+      }
+      router.push("/dashboard");
+    } catch (err: any) {
+      alert(err.message || "Erro ao excluir evento");
+      setDeleteLoading(false);
     }
   };
 
@@ -879,6 +900,17 @@ export default function EventDetailPage({
                   <span>Fechar Lista</span>
                 </button>
               )
+            )}
+
+            {event.isOwner && (
+              <button
+                onClick={() => setShowDeleteModal(true)}
+                className="inline-flex items-center justify-center gap-1.5 px-3.5 py-2.5 sm:py-2 rounded-xl text-xs font-semibold bg-white hover:bg-rose-50 dark:bg-slate-800 dark:hover:bg-rose-950/40 text-rose-600 dark:text-rose-400 border border-rose-200 dark:border-rose-900/50 transition-all shadow-sm"
+                title="Excluir este evento"
+              >
+                <Trash2 className="w-3.5 h-3.5" />
+                <span className="hidden sm:inline">Excluir</span>
+              </button>
             )}
           </div>
         </div>
@@ -3396,6 +3428,36 @@ export default function EventDetailPage({
             </div>
           </div>
         )}
+
+        {/* Zona de Perigo para o Proprietário */}
+        {event.isOwner && (
+          <div className="mt-12 p-5 sm:p-6 rounded-3xl border border-rose-200 dark:border-rose-950/60 bg-rose-50/40 dark:bg-rose-950/20 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+            <div>
+              <h4 className="text-sm font-bold text-rose-900 dark:text-rose-200 flex items-center gap-2">
+                <Trash2 className="w-4 h-4 text-rose-600" />
+                Excluir Evento
+              </h4>
+              <p className="text-xs text-rose-700/80 dark:text-rose-400/80 mt-1 max-w-xl leading-relaxed">
+                Esta ação remove o evento, suas despesas, famílias cadastradas e encerra imediatamente o link público do WhatsApp.
+              </p>
+            </div>
+            <button
+              onClick={() => setShowDeleteModal(true)}
+              className="px-4 py-2.5 rounded-xl text-xs font-semibold bg-rose-600 hover:bg-rose-700 text-white shadow-sm shadow-rose-600/20 transition-all self-start sm:self-auto min-h-[42px] flex items-center gap-2"
+            >
+              <Trash2 className="w-4 h-4" />
+              Excluir Evento
+            </button>
+          </div>
+        )}
+
+        <ConfirmDeleteModal
+          isOpen={showDeleteModal}
+          onClose={() => setShowDeleteModal(false)}
+          onConfirm={handleDeleteEvent}
+          eventTitle={event.title}
+          isDeleting={deleteLoading}
+        />
       </main>
     </div>
   );

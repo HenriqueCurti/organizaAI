@@ -55,7 +55,7 @@ export async function GET(
     },
   });
 
-  if (!event) {
+  if (!event || event.deletedAt) {
     return NextResponse.json({ error: "Evento não encontrado" }, { status: 404 });
   }
 
@@ -193,7 +193,7 @@ export async function PUT(
     include: { members: { where: { userId: user.id } } },
   });
 
-  if (!existingEvent) {
+  if (!existingEvent || existingEvent.deletedAt) {
     return NextResponse.json({ error: "Evento não encontrado" }, { status: 404 });
   }
 
@@ -245,7 +245,7 @@ export async function DELETE(
     where: { id },
   });
 
-  if (!existingEvent) {
+  if (!existingEvent || existingEvent.deletedAt) {
     return NextResponse.json({ error: "Evento não encontrado" }, { status: 404 });
   }
 
@@ -256,6 +256,12 @@ export async function DELETE(
     );
   }
 
-  await prisma.event.delete({ where: { id } });
+  await prisma.event.update({
+    where: { id },
+    data: {
+      deletedAt: new Date(),
+    },
+  });
+
   return NextResponse.json({ message: "Evento excluído com sucesso" });
 }

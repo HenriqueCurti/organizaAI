@@ -34,7 +34,7 @@ export async function POST(
     include: { members: { where: { userId: user.id } } },
   });
 
-  if (!event) {
+  if (!event || event.deletedAt) {
     return NextResponse.json({ error: "Evento não encontrado" }, { status: 404 });
   }
 
