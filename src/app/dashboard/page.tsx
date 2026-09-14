@@ -48,8 +48,14 @@ interface EventItem {
 
 export default function DashboardPage() {
   const router = useRouter();
-  const [events, setEvents] = useState<EventItem[]>([]);
+  const [upcomingEvents, setUpcomingEvents] = useState<EventItem[]>([]);
+  const [pastEvents, setPastEvents] = useState<EventItem[]>([]);
+  const [page, setPage] = useState(1);
+  const [hasMorePast, setHasMorePast] = useState(false);
+  
   const [loading, setLoading] = useState(true);
+  const [loadingMore, setLoadingMore] = useState(false);
+  
   const [copiedCode, setCopiedCode] = useState<string | null>(null);
   const [eventToDelete, setEventToDelete] = useState<EventItem | null>(null);
   const [deleteLoading, setDeleteLoading] = useState(false);
@@ -57,22 +63,34 @@ export default function DashboardPage() {
   const [showTourModal, setShowTourModal] = useState(false);
 
   useEffect(() => {
-    fetch("/api/eventos")
-      .then((res) => {
-        if (res.status === 401) {
+    const fetchInitialData = async () => {
+      try {
+        const [upRes, pastRes] = await Promise.all([
+          fetch("/api/eventos?status=upcoming"),
+          fetch("/api/eventos?status=past&page=1&limit=6")
+        ]);
+
+        if (upRes.status === 401 || pastRes.status === 401) {
           router.push("/login?from=/dashboard");
-          return null;
+          return;
         }
-        return res.json();
-      })
-      .then((data) => {
-        if (!data) return;
-        const fetchedEvents = data.events || [];
-        setEvents(fetchedEvents);
+
+        const upData = await upRes.json();
+        const pastData = await pastRes.json();
+
+        const upcoming = upData.events || [];
+        const past = pastData.events || [];
+        
+        setUpcomingEvents(upcoming);
+        setPastEvents(past);
+        
+        if (pastData.pagination) {
+          setHasMorePast(pastData.pagination.hasNextPage);
+        }
+
         setLoading(false);
 
-        // Se o novo usuário não tem eventos e ainda não viu o tour, abre automaticamente
-        if (fetchedEvents.length === 0) {
+        if (upcoming.length === 0 && past.length === 0) {
           try {
             const hasSeen = localStorage.getItem("organizaai_welcome_tour_seen");
             if (hasSeen !== "true") {
@@ -80,9 +98,33 @@ export default function DashboardPage() {
             }
           } catch {}
         }
-      })
-      .catch(() => setLoading(false));
+      } catch (err) {
+        setLoading(false);
+      }
+    };
+    fetchInitialData();
   }, [router]);
+
+  const loadMorePastEvents = async () => {
+    if (loadingMore || !hasMorePast) return;
+    setLoadingMore(true);
+    const nextPage = page + 1;
+    try {
+      const res = await fetch(`/api/eventos?status=past&page=${nextPage}&limit=6`);
+      if (res.ok) {
+        const data = await res.json();
+        setPastEvents(prev => [...prev, ...(data.events || [])]);
+        setPage(nextPage);
+        if (data.pagination) {
+          setHasMorePast(data.pagination.hasNextPage);
+        }
+      }
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setLoadingMore(false);
+    }
+  };
 
   const handleDeleteRequest = (event: EventItem, e: React.MouseEvent) => {
     e.preventDefault();
@@ -101,12 +143,16 @@ export default function DashboardPage() {
         const data = await res.json();
         throw new Error(data.error || "Erro ao excluir evento");
       }
-      setEvents((prev) => prev.filter((e) => e.id !== eventToDelete.id));
+      if (eventToDelete.isPast) {
+        setPastEvents((prev) => prev.filter((e) => e.id !== eventToDelete.id));
+      } else {
+        setUpcomingEvents((prev) => prev.filter((e) => e.id !== eventToDelete.id));
+      }
       setEventToDelete(null);
       setToastMessage("Evento excluído com sucesso!");
       setTimeout(() => setToastMessage(null), 3000);
-    } catch (err: unknown) {
-      const message = err instanceof Error ? err.message : "Erro ao excluir evento";
+    } catch (err: any) {
+      const message = err.message || "Erro ao excluir evento";
       alert(message);
     } finally {
       setDeleteLoading(false);
@@ -136,11 +182,7 @@ export default function DashboardPage() {
     });
     return `${startFmt} até ${endFmt}`;
   };
-
-  const upcomingEvents = events.filter((e) => !e.isPast);
-  const pastEvents = events.filter((e) => e.isPast);
-
-  return (
+\n  return (
     <div className="min-h-screen flex flex-col bg-slate-50 dark:bg-[#080d1a]">
       <Navbar />
 
@@ -200,7 +242,7 @@ export default function DashboardPage() {
               />
             ))}
           </div>
-        ) : events.length === 0 ? (
+        ) : upcomingEvents.length === 0 && pastEvents.length === 0 ? (
           <div className="bg-white dark:bg-[#0f172a] rounded-3xl border border-slate-200 dark:border-slate-800 p-6 sm:p-8 lg:p-10 shadow-sm max-w-4xl mx-auto animate-in fade-in duration-200">
             {/* Top Badge & Titles */}
             <div className="text-center max-w-2xl mx-auto mb-8">

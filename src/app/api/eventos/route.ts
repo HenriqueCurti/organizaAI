@@ -28,23 +28,46 @@ const createEventSchema = z.object({
   })).optional(),
 });
 
-export async function GET() {
+export async function GET(req: Request) {
   const user = await getCurrentUser();
   if (!user) {
     return NextResponse.json({ error: "Não autorizado" }, { status: 401 });
   }
 
+  const { searchParams } = new URL(req.url);
+  const status = searchParams.get("status") || "all";
+  const page = parseInt(searchParams.get("page") || "1");
+  const limit = parseInt(searchParams.get("limit") || "50");
+  const skip = (page - 1) * limit;
+
   const now = new Date();
 
-  // Buscar eventos ativos criados pelo usuário ou onde ele é membro
+  const baseWhere: any = {
+    deletedAt: null,
+    OR: [
+      { creatorId: user.id },
+      { members: { some: { userId: user.id } } },
+    ],
+  };
+
+  let orderByClause: any = { startDate: "desc" };
+
+  if (status === "upcoming") {
+    baseWhere.endDate = { gte: now };
+    orderByClause = { startDate: "asc" };
+  } else if (status === "past") {
+    baseWhere.endDate = { lt: now };
+    orderByClause = { startDate: "desc" };
+  }
+
+  const totalCount = await prisma.event.count({ where: baseWhere });
+  const totalPages = Math.ceil(totalCount / limit);
+
   const events = await prisma.event.findMany({
-    where: {
-      deletedAt: null,
-      OR: [
-        { creatorId: user.id },
-        { members: { some: { userId: user.id } } },
-      ],
-    },
+    where: baseWhere,
+    orderBy: orderByClause,
+    skip,
+    take: limit,
     include: {
       creator: { select: { id: true, name: true, email: true } },
       members: { where: { userId: user.id } },
@@ -57,21 +80,11 @@ export async function GET() {
     },
   });
 
-  // Ordenação: Próximos eventos (mais próximo primeiro) e depois os já finalizados
-  const upcomingEvents = events
-    .filter((e) => new Date(e.endDate) >= now)
-    .sort((a, b) => new Date(a.startDate).getTime() - new Date(b.startDate).getTime());
-
-  const pastEvents = events
-    .filter((e) => new Date(e.endDate) < now)
-    .sort((a, b) => new Date(b.startDate).getTime() - new Date(a.startDate).getTime());
-
-  const sortedEvents = [...upcomingEvents, ...pastEvents].map((event) => {
+  const formattedEvents = events.map((event) => {
     const isOwner = event.creatorId === user.id;
     const memberRecord = event.members[0];
     const canEdit = isOwner || memberRecord?.canEdit || false;
 
-    // Métricas rápidas
     const totalCost = event.costs.reduce((acc, c) => acc + c.amount, 0);
     const actualParticipants = event.families.reduce(
       (acc, f) => acc + f.members.length,
@@ -104,7 +117,26 @@ export async function GET() {
     };
   });
 
-  return NextResponse.json({ events: sortedEvents });
+  if (status === "all") {
+    const upcomingEvents = formattedEvents
+      .filter((e) => !e.isPast)
+      .sort((a, b) => new Date(a.startDate).getTime() - new Date(b.startDate).getTime());
+    const pastEvents = formattedEvents
+      .filter((e) => e.isPast)
+      .sort((a, b) => new Date(b.startDate).getTime() - new Date(a.startDate).getTime());
+    return NextResponse.json({ events: [...upcomingEvents, ...pastEvents] });
+  }
+
+  return NextResponse.json({ 
+    events: formattedEvents,
+    pagination: {
+      page,
+      limit,
+      totalCount,
+      totalPages,
+      hasNextPage: page < totalPages
+    }
+  });
 }
 
 export async function POST(req: Request) {
