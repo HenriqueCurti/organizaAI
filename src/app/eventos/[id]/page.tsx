@@ -34,8 +34,12 @@ import {
   Lock,
   Unlock,
   Loader2,
+  ExternalLink,
+  LocateFixed,
+  Search,
 } from "lucide-react";
 import { ConfirmDeleteModal } from "@/components/confirm-delete-modal";
+import { getGoogleMapsUrl, parseLocationInput } from "@/lib/maps";
 
 interface Member {
   id: string;
@@ -97,6 +101,9 @@ interface EventDetail {
   startDate: string;
   endDate: string;
   locationName: string | null;
+  locationUrl?: string | null;
+  latitude?: number | null;
+  longitude?: number | null;
   minPayingAge: number;
   enableBbq: boolean;
   status: "OPEN" | "CLOSED" | "COMPLETED";
@@ -184,6 +191,25 @@ export default function EventDetailPage({
   const [savingPixConfig, setSavingPixConfig] = useState(false);
   const [pixConfigError, setPixConfigError] = useState<string | null>(null);
   const [pixConfigSuccess, setPixConfigSuccess] = useState(false);
+
+  // Modal de Edição de Dados Gerais e Localização do Evento
+  const [showEditEventModal, setShowEditEventModal] = useState(false);
+  const [editEventForm, setEditEventForm] = useState({
+    title: "",
+    description: "",
+    startDate: "",
+    endDate: "",
+    locationName: "",
+    locationUrl: "",
+    latitude: null as number | null,
+    longitude: null as number | null,
+  });
+  const [rawEditLocationInput, setRawEditLocationInput] = useState("");
+  const [isGettingEditGps, setIsGettingEditGps] = useState(false);
+  const [editGpsError, setEditGpsError] = useState<string | null>(null);
+  const [savingEditEvent, setSavingEditEvent] = useState(false);
+  const [editEventError, setEditEventError] = useState<string | null>(null);
+  const [editEventSuccess, setEditEventSuccess] = useState(false);
 
   // Modal Pix Específico de Família
   const [pixModalData, setPixModalData] = useState<{
@@ -683,6 +709,121 @@ export default function EventDetailPage({
     }
   };
 
+  const handleOpenEditEventModal = () => {
+    if (!event) return;
+    setEditEventForm({
+      title: event.title,
+      description: event.description || "",
+      startDate: event.startDate ? event.startDate.split("T")[0] : "",
+      endDate: event.endDate ? event.endDate.split("T")[0] : "",
+      locationName: event.locationName || "",
+      locationUrl: event.locationUrl || "",
+      latitude: event.latitude ?? null,
+      longitude: event.longitude ?? null,
+    });
+    setRawEditLocationInput(
+      event.locationUrl ||
+      (event.latitude != null && event.longitude != null ? `${event.latitude}, ${event.longitude}` : "")
+    );
+    setEditGpsError(null);
+    setEditEventError(null);
+    setEditEventSuccess(false);
+    setShowEditEventModal(true);
+  };
+
+  const handleEditLocationUrlChange = (val: string) => {
+    setRawEditLocationInput(val);
+    const parsed = parseLocationInput(val);
+    setEditEventForm((prev) => ({
+      ...prev,
+      locationUrl: parsed.locationUrl,
+      latitude: parsed.latitude,
+      longitude: parsed.longitude,
+    }));
+  };
+
+  const handleUseCurrentLocationInEdit = () => {
+    if (typeof window === "undefined" || !navigator.geolocation) {
+      setEditGpsError("Geolocalização não é suportada neste navegador.");
+      return;
+    }
+    setIsGettingEditGps(true);
+    setEditGpsError(null);
+    navigator.geolocation.getCurrentPosition(
+      (position) => {
+        const lat = Number(position.coords.latitude.toFixed(6));
+        const lng = Number(position.coords.longitude.toFixed(6));
+        const url = `https://www.google.com/maps/search/?api=1&query=${lat},${lng}`;
+        setRawEditLocationInput(`${lat}, ${lng}`);
+        setEditEventForm((prev) => ({
+          ...prev,
+          locationUrl: url,
+          latitude: lat,
+          longitude: lng,
+          locationName: prev.locationName || "Localização GPS",
+        }));
+        setIsGettingEditGps(false);
+      },
+      (err) => {
+        console.warn("Erro ao obter GPS:", err);
+        setIsGettingEditGps(false);
+        if (err.code === 1) {
+          setEditGpsError("Permissão de localização recusada no navegador.");
+        } else {
+          setEditGpsError("Não foi possível obter a posição GPS no momento.");
+        }
+      },
+      { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
+    );
+  };
+
+  const handleSearchOnMapsInEdit = () => {
+    const query = editEventForm.locationName.trim();
+    const url = query
+      ? `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(query)}`
+      : "https://www.google.com/maps";
+    window.open(url, "_blank", "noopener,noreferrer");
+  };
+
+  const handleSaveEditEvent = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (savingEditEvent) return;
+    setSavingEditEvent(true);
+    setEditEventError(null);
+    try {
+      const res = await fetch(`/api/eventos/${id}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          title: editEventForm.title.trim(),
+          description: editEventForm.description.trim() || null,
+          startDate: editEventForm.startDate,
+          endDate: editEventForm.endDate,
+          locationName: editEventForm.locationName.trim() || null,
+          locationUrl: editEventForm.locationUrl.trim() || null,
+          latitude: editEventForm.latitude,
+          longitude: editEventForm.longitude,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        setEditEventError(data.error || "Erro ao salvar informações do evento");
+        setSavingEditEvent(false);
+        return;
+      }
+      setEditEventSuccess(true);
+      setTimeout(() => {
+        setShowEditEventModal(false);
+        setEditEventSuccess(false);
+      }, 700);
+      await fetchEvent();
+    } catch {
+      setEditEventError("Falha de comunicação com o servidor.");
+    } finally {
+      setSavingEditEvent(false);
+    }
+  };
+
   const handleOpenEditFamily = (family: Family) => {
     setEditingFamily({
       id: family.id,
@@ -960,6 +1101,17 @@ export default function EventDetailPage({
               )
             )}
 
+            {event.canEdit && (
+              <button
+                onClick={handleOpenEditEventModal}
+                className="inline-flex items-center justify-center gap-1.5 px-3.5 py-2.5 sm:py-2 rounded-xl text-xs font-semibold bg-white hover:bg-slate-50 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-700 transition-all shadow-sm"
+                title="Editar localização, título, descrição ou datas do evento"
+              >
+                <Pencil className="w-3.5 h-3.5" />
+                <span className="hidden sm:inline">Editar Dados</span>
+              </button>
+            )}
+
             {event.isOwner && (
               <button
                 onClick={() => setShowDeleteModal(true)}
@@ -1024,11 +1176,38 @@ export default function EventDetailPage({
                   </span>
                 </div>
 
-                {event.locationName && (
-                  <div className="flex items-center gap-1.5">
-                    <MapPin className="w-4 h-4 text-slate-400 shrink-0" />
-                    <span>{event.locationName}</span>
-                  </div>
+                {(event.locationName || event.locationUrl) ? (
+                  (() => {
+                    const mapUrl = getGoogleMapsUrl(event);
+                    return mapUrl ? (
+                      <a
+                        href={mapUrl}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-emerald-50 hover:bg-emerald-100 dark:bg-emerald-950/40 dark:hover:bg-emerald-900/60 text-emerald-800 dark:text-emerald-300 border border-emerald-200/70 dark:border-emerald-800/60 transition-colors font-medium group text-xs"
+                        title="Abrir no Google Maps / Waze"
+                      >
+                        <MapPin className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400 shrink-0" />
+                        <span className="truncate max-w-[200px] sm:max-w-xs">{event.locationName || "Ver no Google Maps"}</span>
+                        <ExternalLink className="w-3 h-3 text-emerald-500 opacity-70 group-hover:opacity-100 shrink-0" />
+                      </a>
+                    ) : (
+                      <div className="flex items-center gap-1.5">
+                        <MapPin className="w-4 h-4 text-slate-400 shrink-0" />
+                        <span>{event.locationName}</span>
+                      </div>
+                    );
+                  })()
+                ) : (
+                  event.canEdit && (
+                    <button
+                      onClick={handleOpenEditEventModal}
+                      className="inline-flex items-center gap-1 text-slate-500 hover:text-emerald-600 dark:hover:text-emerald-400 transition-colors text-xs font-medium"
+                    >
+                      <MapPin className="w-3.5 h-3.5 text-slate-400" />
+                      <span>+ Adicionar localização</span>
+                    </button>
+                  )
                 )}
               </div>
             </div>
@@ -2848,6 +3027,203 @@ export default function EventDetailPage({
                   >
                     {savingPixConfig && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
                     <span>{savingPixConfig ? "Salvando..." : "Salvar Configurações Pix"}</span>
+                  </button>
+                </div>
+              </form>
+            </div>
+          </div>
+        )}
+
+        {/* ========================================================
+            MODAL: EDITAR INFORMAÇÕES E LOCALIZAÇÃO DO EVENTO
+            ======================================================== */}
+        {showEditEventModal && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-black/60 backdrop-blur-sm overflow-y-auto">
+            <div className="bg-white dark:bg-[#0f172a] rounded-3xl border border-slate-200 dark:border-slate-800 p-5 sm:p-6 max-w-lg w-full shadow-2xl my-auto max-h-[90vh] overflow-y-auto space-y-4">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <div className="p-2 rounded-xl bg-emerald-50 dark:bg-emerald-950/50 text-emerald-600 dark:text-emerald-400">
+                    <Pencil className="w-5 h-5" />
+                  </div>
+                  <h3 className="text-base sm:text-lg font-bold text-slate-900 dark:text-white">
+                    Editar Dados e Localização
+                  </h3>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setShowEditEventModal(false)}
+                  className="p-1.5 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 rounded-lg"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+
+              <p className="text-xs text-slate-500 dark:text-slate-400 leading-relaxed">
+                Atualize os dados básicos do evento e o link ou coordenadas do Google Maps para os convidados.
+              </p>
+
+              {editEventError && (
+                <div className="p-3 rounded-xl bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-900/60 text-rose-700 dark:text-rose-300 text-xs flex items-center gap-2">
+                  <AlertCircle className="w-4 h-4 shrink-0" />
+                  <span>{editEventError}</span>
+                </div>
+              )}
+
+              {editEventSuccess && (
+                <div className="p-3 rounded-xl bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-900/60 text-emerald-700 dark:text-emerald-300 text-xs flex items-center gap-2">
+                  <CheckCircle2 className="w-4 h-4 shrink-0" />
+                  <span>Informações do evento salvas com sucesso!</span>
+                </div>
+              )}
+
+              <form onSubmit={handleSaveEditEvent} className="space-y-4">
+                <div>
+                  <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                    Título do Evento *
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    value={editEventForm.title}
+                    onChange={(e) => setEditEventForm({ ...editEventForm, title: e.target.value })}
+                    className="w-full px-3 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-900 dark:text-white text-sm"
+                  />
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                      Data Inicial *
+                    </label>
+                    <input
+                      type="date"
+                      required
+                      value={editEventForm.startDate}
+                      onChange={(e) => setEditEventForm({ ...editEventForm, startDate: e.target.value })}
+                      className="w-full px-3 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-900 dark:text-white text-sm"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                      Data Final *
+                    </label>
+                    <input
+                      type="date"
+                      required
+                      value={editEventForm.endDate}
+                      onChange={(e) => setEditEventForm({ ...editEventForm, endDate: e.target.value })}
+                      className="w-full px-3 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-900 dark:text-white text-sm"
+                    />
+                  </div>
+                </div>
+
+                {/* Localização Inteligente */}
+                <div className="space-y-3 pt-2 border-t border-slate-100 dark:border-slate-800">
+                  <div>
+                    <div className="flex items-center justify-between mb-1">
+                      <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300">
+                        Nome do Local / Chácara
+                      </label>
+                      <button
+                        type="button"
+                        onClick={handleSearchOnMapsInEdit}
+                        className="inline-flex items-center gap-1 text-[11px] font-medium text-emerald-600 dark:text-emerald-400 hover:underline"
+                      >
+                        <Search className="w-3 h-3" />
+                        Buscar no Maps
+                      </button>
+                    </div>
+                    <div className="relative">
+                      <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-slate-400">
+                        <MapPin className="w-4 h-4" />
+                      </div>
+                      <input
+                        type="text"
+                        placeholder="Ex: Rancho Recanto dos Pássaros, Rifaina/SP"
+                        value={editEventForm.locationName}
+                        onChange={(e) => setEditEventForm({ ...editEventForm, locationName: e.target.value })}
+                        className="w-full pl-9 pr-3 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-900 dark:text-white text-sm"
+                      />
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                      Link do Google Maps ou Coordenadas GPS
+                    </label>
+                    <input
+                      type="text"
+                      placeholder="Cole o link do Maps (maps.app.goo.gl/...) ou coordenadas (-20.4851, -47.4567)"
+                      value={rawEditLocationInput}
+                      onChange={(e) => handleEditLocationUrlChange(e.target.value)}
+                      className="w-full px-3 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-900 dark:text-white text-sm"
+                    />
+
+                    <div className="flex flex-wrap items-center gap-2 mt-2">
+                      <button
+                        type="button"
+                        onClick={handleUseCurrentLocationInEdit}
+                        disabled={isGettingEditGps}
+                        className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-medium bg-emerald-50 dark:bg-emerald-950/50 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800/60 hover:bg-emerald-100 dark:hover:bg-emerald-900/40 transition-colors disabled:opacity-50 min-h-[40px]"
+                      >
+                        {isGettingEditGps ? (
+                          <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                        ) : (
+                          <LocateFixed className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400" />
+                        )}
+                        <span>{isGettingEditGps ? "Obtendo GPS..." : "Usar meu GPS atual"}</span>
+                      </button>
+
+                      {getGoogleMapsUrl(editEventForm) && (
+                        <a
+                          href={getGoogleMapsUrl(editEventForm)!}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="inline-flex items-center gap-1 px-3 py-2 rounded-xl text-xs font-medium text-slate-600 dark:text-slate-300 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors min-h-[40px]"
+                        >
+                          <ExternalLink className="w-3.5 h-3.5 text-emerald-500" />
+                          <span>Testar rota no mapa ↗</span>
+                        </a>
+                      )}
+                    </div>
+
+                    {editGpsError && (
+                      <p className="text-xs text-rose-500 dark:text-rose-400 mt-1.5 flex items-center gap-1">
+                        <AlertCircle className="w-3.5 h-3.5 shrink-0" />
+                        {editGpsError}
+                      </p>
+                    )}
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                    Descrição ou Orientações Gerais
+                  </label>
+                  <textarea
+                    rows={2}
+                    value={editEventForm.description}
+                    onChange={(e) => setEditEventForm({ ...editEventForm, description: e.target.value })}
+                    placeholder="Orientações aos participantes..."
+                    className="w-full px-3 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-900 dark:text-white text-sm"
+                  />
+                </div>
+
+                <div className="flex items-center justify-end gap-3 pt-3 border-t border-slate-100 dark:border-slate-800">
+                  <button
+                    type="button"
+                    onClick={() => setShowEditEventModal(false)}
+                    className="px-4 py-2.5 rounded-xl text-xs font-semibold text-slate-500 hover:text-slate-800 dark:hover:text-slate-200"
+                  >
+                    Cancelar
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={savingEditEvent || !editEventForm.title.trim()}
+                    className="px-5 py-2.5 rounded-xl text-xs font-semibold bg-emerald-600 hover:bg-emerald-700 text-white shadow-sm disabled:opacity-50 flex items-center gap-2 min-h-[42px]"
+                  >
+                    {savingEditEvent && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
+                    <span>{savingEditEvent ? "Salvando..." : "Salvar Alterações"}</span>
                   </button>
                 </div>
               </form>

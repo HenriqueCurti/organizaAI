@@ -29,6 +29,7 @@ model Event {
   startDate       DateTime
   endDate         DateTime
   locationName    String?
+  locationUrl     String?       // Link do Google Maps / Waze
   latitude        Float?
   longitude       Float?
   pixKey          String?       // Chave Pix do organizador

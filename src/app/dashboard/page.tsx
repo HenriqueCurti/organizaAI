@@ -17,8 +17,10 @@ import {
   Clock,
   Trash2,
   X,
+  ExternalLink,
 } from "lucide-react";
 import { ConfirmDeleteModal } from "@/components/confirm-delete-modal";
+import { getGoogleMapsUrl } from "@/lib/maps";
 
 interface EventItem {
   id: string;
@@ -27,6 +29,9 @@ interface EventItem {
   startDate: string;
   endDate: string;
   locationName: string | null;
+  locationUrl?: string | null;
+  latitude?: number | null;
+  longitude?: number | null;
   minPayingAge: number;
   inviteCode: string;
   isOwner: boolean;
@@ -315,11 +320,31 @@ function EventCard({
             <span>{formatDateRange(event.startDate, event.endDate)}</span>
           </div>
 
-          {event.locationName && (
-            <div className="flex items-center gap-2">
-              <MapPin className="w-3.5 h-3.5 text-slate-400 shrink-0" />
-              <span className="truncate">{event.locationName}</span>
-            </div>
+          {(event.locationName || event.locationUrl) && (
+            (() => {
+              const mapUrl = getGoogleMapsUrl(event);
+              return mapUrl ? (
+                <div className="flex items-center gap-2">
+                  <MapPin className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400 shrink-0" />
+                  <a
+                    href={mapUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    onClick={(e) => e.stopPropagation()}
+                    className="truncate hover:text-emerald-600 dark:hover:text-emerald-400 hover:underline inline-flex items-center gap-1 transition-colors"
+                    title="Abrir no Google Maps"
+                  >
+                    <span className="truncate">{event.locationName || "Ver no Google Maps"}</span>
+                    <ExternalLink className="w-3 h-3 text-slate-400 shrink-0 opacity-70" />
+                  </a>
+                </div>
+              ) : (
+                <div className="flex items-center gap-2">
+                  <MapPin className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+                  <span className="truncate">{event.locationName}</span>
+                </div>
+              );
+            })()
           )}
         </div>
       </div>

@@ -19,7 +19,11 @@ import {
   Trash2,
   Sparkles,
   Loader2,
+  ExternalLink,
+  LocateFixed,
+  Search,
 } from "lucide-react";
+import { parseLocationInput, getGoogleMapsUrl } from "@/lib/maps";
 
 interface InitialCostItem {
   id: string;
@@ -53,12 +57,73 @@ export default function NewEventPage() {
     startDate: "",
     endDate: "",
     locationName: "",
+    locationUrl: "",
+    latitude: null as number | null,
+    longitude: null as number | null,
     minPayingAge: 12,
     enableBbq: true,
     pixKeyType: "CPF",
     pixKey: "",
     pixReceiverName: "",
   });
+
+  const [rawLocationInput, setRawLocationInput] = useState("");
+  const [isGettingGps, setIsGettingGps] = useState(false);
+  const [gpsError, setGpsError] = useState<string | null>(null);
+
+  const handleLocationUrlChange = (val: string) => {
+    setRawLocationInput(val);
+    const parsed = parseLocationInput(val);
+    setFormData((prev) => ({
+      ...prev,
+      locationUrl: parsed.locationUrl,
+      latitude: parsed.latitude,
+      longitude: parsed.longitude,
+    }));
+  };
+
+  const handleUseCurrentLocation = () => {
+    if (typeof window === "undefined" || !navigator.geolocation) {
+      setGpsError("Geolocalização não é suportada neste navegador.");
+      return;
+    }
+    setIsGettingGps(true);
+    setGpsError(null);
+    navigator.geolocation.getCurrentPosition(
+      (position) => {
+        const lat = Number(position.coords.latitude.toFixed(6));
+        const lng = Number(position.coords.longitude.toFixed(6));
+        const url = `https://www.google.com/maps/search/?api=1&query=${lat},${lng}`;
+        setRawLocationInput(`${lat}, ${lng}`);
+        setFormData((prev) => ({
+          ...prev,
+          locationUrl: url,
+          latitude: lat,
+          longitude: lng,
+          locationName: prev.locationName || "Localização GPS",
+        }));
+        setIsGettingGps(false);
+      },
+      (err) => {
+        console.warn("Erro ao obter GPS:", err);
+        setIsGettingGps(false);
+        if (err.code === 1) {
+          setGpsError("Permissão de localização foi recusada no navegador.");
+        } else {
+          setGpsError("Não foi possível obter a posição GPS no momento.");
+        }
+      },
+      { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
+    );
+  };
+
+  const handleSearchOnMaps = () => {
+    const query = formData.locationName.trim();
+    const url = query
+      ? `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(query)}`
+      : "https://www.google.com/maps";
+    window.open(url, "_blank", "noopener,noreferrer");
+  };
 
   // Campos específicos do Modo Rápido (Estimativa)
   const [estimatedAttendees, setEstimatedAttendees] = useState<string>("50");
@@ -108,6 +173,10 @@ export default function NewEventPage() {
     try {
       const payload: any = {
         ...formData,
+        locationName: formData.locationName.trim() || undefined,
+        locationUrl: formData.locationUrl.trim() || undefined,
+        latitude: formData.latitude ?? undefined,
+        longitude: formData.longitude ?? undefined,
         creationMode: mode,
       };
 
@@ -256,21 +325,92 @@ export default function NewEventPage() {
                 </div>
               </div>
 
-              <div>
-                <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1.5">
-                  Localização / Chácara (Opcional)
-                </label>
-                <div className="relative">
-                  <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-slate-400">
-                    <MapPin className="w-4 h-4" />
+              {/* Seção de Localização Inteligente */}
+              <div className="space-y-3 pt-2">
+                <div>
+                  <div className="flex items-center justify-between mb-1.5">
+                    <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300">
+                      Nome do Local / Chácara (Opcional)
+                    </label>
+                    <button
+                      type="button"
+                      onClick={handleSearchOnMaps}
+                      className="inline-flex items-center gap-1 text-[11px] font-medium text-emerald-600 dark:text-emerald-400 hover:text-emerald-700 dark:hover:text-emerald-300 transition-colors"
+                      title="Pesquisar local no Google Maps para pegar o link ou endereço"
+                    >
+                      <Search className="w-3 h-3" />
+                      Buscar no Maps
+                    </button>
                   </div>
-                  <input
-                    type="text"
-                    value={formData.locationName}
-                    onChange={(e) => setFormData({ ...formData, locationName: e.target.value })}
-                    placeholder="Ex: Rancho Recanto dos Pássaros - Rifaina, SP"
-                    className="w-full pl-10 pr-4 py-3 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900/50 text-slate-900 dark:text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-emerald-500 text-sm"
-                  />
+                  <div className="relative">
+                    <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-slate-400">
+                      <MapPin className="w-4 h-4" />
+                    </div>
+                    <input
+                      type="text"
+                      value={formData.locationName}
+                      onChange={(e) => setFormData({ ...formData, locationName: e.target.value })}
+                      placeholder="Ex: Rancho Recanto dos Pássaros - Rifaina, SP"
+                      className="w-full pl-10 pr-4 py-3 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900/50 text-slate-900 dark:text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-emerald-500 text-sm"
+                    />
+                  </div>
+                </div>
+
+                <div>
+                  <div className="flex items-center justify-between mb-1.5">
+                    <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300">
+                      Link do Google Maps ou Coordenadas GPS (Opcional)
+                    </label>
+                  </div>
+                  <div className="relative">
+                    <input
+                      type="text"
+                      value={rawLocationInput}
+                      onChange={(e) => handleLocationUrlChange(e.target.value)}
+                      placeholder="Cole o link do Google Maps (ex: maps.app.goo.gl/...) ou coordenadas (-20.4851, -47.4567)"
+                      className="w-full px-4 py-3 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900/50 text-slate-900 dark:text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-emerald-500 text-sm"
+                    />
+                  </div>
+
+                  {/* Ações Mobile-First de Geolocalização */}
+                  <div className="flex flex-wrap items-center gap-2 mt-2">
+                    <button
+                      type="button"
+                      onClick={handleUseCurrentLocation}
+                      disabled={isGettingGps}
+                      className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-medium bg-emerald-50 dark:bg-emerald-950/50 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800/60 hover:bg-emerald-100 dark:hover:bg-emerald-900/40 transition-colors disabled:opacity-50 min-h-[40px]"
+                    >
+                      {isGettingGps ? (
+                        <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                      ) : (
+                        <LocateFixed className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400" />
+                      )}
+                      <span>{isGettingGps ? "Obtendo GPS..." : "Usar meu GPS atual"}</span>
+                    </button>
+
+                    {getGoogleMapsUrl(formData) && (
+                      <a
+                        href={getGoogleMapsUrl(formData)!}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="inline-flex items-center gap-1 px-3 py-2 rounded-xl text-xs font-medium text-slate-600 dark:text-slate-300 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors min-h-[40px]"
+                      >
+                        <ExternalLink className="w-3.5 h-3.5 text-emerald-500" />
+                        <span>Testar no mapa ↗</span>
+                      </a>
+                    )}
+                  </div>
+
+                  {gpsError && (
+                    <p className="text-xs text-rose-500 dark:text-rose-400 mt-1.5 flex items-center gap-1">
+                      <AlertCircle className="w-3.5 h-3.5 shrink-0" />
+                      {gpsError}
+                    </p>
+                  )}
+
+                  <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-1.5 leading-relaxed">
+                    💡 <strong>Dica:</strong> Cole o link copiado do Google Maps no celular ou use suas coordenadas. Os convidados poderão abrir o mapa e traçar rota com um toque!
+                  </p>
                 </div>
               </div>
 

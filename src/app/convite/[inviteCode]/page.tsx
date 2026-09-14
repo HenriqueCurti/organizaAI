@@ -23,7 +23,9 @@ import {
   Send,
   AlertCircle,
   Loader2,
+  ExternalLink,
 } from "lucide-react";
+import { getGoogleMapsUrl } from "@/lib/maps";
 
 interface PublicEvent {
   id: string;
@@ -32,6 +34,9 @@ interface PublicEvent {
   startDate: string;
   endDate: string;
   locationName: string | null;
+  locationUrl?: string | null;
+  latitude?: number | null;
+  longitude?: number | null;
   minPayingAge: number;
   enableBbq: boolean;
   status: "OPEN" | "CLOSED" | "COMPLETED";
@@ -255,6 +260,8 @@ export default function PublicInvitePage({
     );
   }
 
+  const mapUrl = event ? getGoogleMapsUrl(event) : null;
+
   return (
     <div className="min-h-screen flex flex-col bg-slate-50 dark:bg-[#080d1a]">
       <Navbar />
@@ -324,11 +331,34 @@ export default function PublicInvitePage({
               </span>
             </div>
 
-            {event.locationName && (
-              <div className="flex items-center gap-1.5">
-                <MapPin className="w-4 h-4 text-rose-500" />
-                <span>{event.locationName}</span>
-              </div>
+            {(event.locationName || mapUrl) && (
+              mapUrl ? (
+                <a
+                  href={mapUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex items-center gap-2 px-3 py-2 rounded-xl bg-emerald-50 hover:bg-emerald-100 dark:bg-emerald-950/40 dark:hover:bg-emerald-900/60 text-emerald-800 dark:text-emerald-300 border border-emerald-200/80 dark:border-emerald-800/60 transition-all text-xs font-semibold group shadow-sm min-h-[44px]"
+                  title="Abrir rota no Google Maps / Waze"
+                >
+                  <div className="p-1.5 rounded-lg bg-emerald-100 dark:bg-emerald-900/80 text-emerald-700 dark:text-emerald-300 shrink-0">
+                    <MapPin className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
+                  </div>
+                  <div className="flex flex-col text-left">
+                    <span className="font-bold text-slate-800 dark:text-slate-100">
+                      {event.locationName || "Ver Localização do Evento"}
+                    </span>
+                    <span className="text-[11px] text-emerald-600 dark:text-emerald-400 flex items-center gap-1 font-medium">
+                      Abrir rota no Google Maps
+                      <ExternalLink className="w-3 h-3 group-hover:translate-x-0.5 transition-transform shrink-0" />
+                    </span>
+                  </div>
+                </a>
+              ) : (
+                <div className="flex items-center gap-1.5 text-xs text-slate-600 dark:text-slate-400">
+                  <MapPin className="w-4 h-4 text-rose-500 shrink-0" />
+                  <span>{event.locationName}</span>
+                </div>
+              )
             )}
           </div>
 
