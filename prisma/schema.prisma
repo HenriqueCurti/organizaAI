@@ -20,6 +20,20 @@ model User {
   createdEvents Event[]       @relation("EventCreator")
   memberships   EventMember[]
   families      Family[]
+  verificationTokens VerificationToken[]
+}
+
+model VerificationToken {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  token     String   @unique
+  type      String   // EMAIL_VERIFICATION, PASSWORD_RESET
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+
+  @@index([token])
+  @@index([userId])
 }
 
 model Event {

@@ -182,7 +182,8 @@ export default function DashboardPage() {
     });
     return `${startFmt} até ${endFmt}`;
   };
-\n  return (
+
+  return (
     <div className="min-h-screen flex flex-col bg-slate-50 dark:bg-[#080d1a]">
       <Navbar />
 

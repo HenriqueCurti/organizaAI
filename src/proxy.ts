@@ -24,6 +24,9 @@ export async function proxy(request: NextRequest) {
     pathname === "/" ||
     pathname.startsWith("/login") ||
     pathname.startsWith("/cadastro") ||
+    pathname.startsWith("/esqueci-a-senha") ||
+    pathname.startsWith("/redefinir-senha") ||
+    pathname.startsWith("/api/auth/google") ||
     pathname.startsWith("/convite/") ||
     pathname.startsWith("/api-docs");
 
