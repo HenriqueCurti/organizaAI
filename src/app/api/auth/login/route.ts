@@ -42,6 +42,13 @@ export async function POST(req: Request) {
       );
     }
 
+    if (!user.emailVerified) {
+      return NextResponse.json(
+        { error: "Por favor, verifique seu e-mail antes de acessar." },
+        { status: 401 }
+      );
+    }
+
     const token = await signSessionToken({
       id: user.id,
       email: user.email,

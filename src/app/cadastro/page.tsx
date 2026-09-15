@@ -38,13 +38,7 @@ function RegisterForm() {
         return;
       }
 
-      const destination =
-        from && from.startsWith("/") && !from.startsWith("//") && from !== "/"
-          ? from
-          : "/dashboard";
-
-      router.push(destination);
-      router.refresh();
+      router.push("/verificar-email/pendente");
     } catch {
       setError("Falha de conexão com o servidor");
       setLoading(false);

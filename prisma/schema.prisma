@@ -12,6 +12,7 @@ model User {
   name          String
   email         String        @unique
   passwordHash  String?
+  emailVerified DateTime?
   image         String?
   role          String        @default("USER") // USER, ADMIN
   createdAt     DateTime      @default(now())

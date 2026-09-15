@@ -68,7 +68,13 @@ export async function GET(request: Request) {
           email,
           name: name || "Usuário",
           image: picture,
+          emailVerified: new Date(),
         },
+      });
+    } else if (!user.emailVerified) {
+      user = await prisma.user.update({
+        where: { id: user.id },
+        data: { emailVerified: new Date() },
       });
     }
 

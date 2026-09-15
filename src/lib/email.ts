@@ -1,4 +1,4 @@
-import nodemailer from "nodemailer";
+import { Resend } from "resend";
 
 interface SendEmailOptions {
   to: string;
@@ -6,34 +6,31 @@ interface SendEmailOptions {
   html: string;
 }
 
-export async function sendEmail({ to, subject, html }: SendEmailOptions) {
-  const smtpEmail = process.env.SMTP_EMAIL;
-  const smtpPassword = process.env.SMTP_PASSWORD;
+const resend = new Resend(process.env.RESEND_API_KEY);
 
-  if (!smtpEmail || !smtpPassword) {
-    console.warn("SMTP_EMAIL ou SMTP_PASSWORD não configurados. E-mail não enviado.");
+export async function sendEmail({ to, subject, html }: SendEmailOptions) {
+  if (!process.env.RESEND_API_KEY) {
+    console.warn("RESEND_API_KEY não configurada. E-mail não enviado.");
     return;
   }
 
-  const transporter = nodemailer.createTransport({
-    service: "gmail",
-    auth: {
-      user: smtpEmail,
-      pass: smtpPassword,
-    },
-  });
-
   try {
-    const info = await transporter.sendMail({
-      from: `"Organiza.AI" <${smtpEmail}>`,
+    const { data, error } = await resend.emails.send({
+      from: "Organiza.AI <onboarding@resend.dev>", // Endereço padrão de teste do Resend
       to,
       subject,
       html,
     });
-    console.log("Message sent: %s", info.messageId);
-    return info;
+
+    if (error) {
+      console.error("Erro do Resend:", error);
+      throw error;
+    }
+
+    console.log("E-mail enviado via Resend:", data);
+    return data;
   } catch (error) {
-    console.error("Erro ao enviar e-mail:", error);
+    console.error("Falha ao enviar e-mail:", error);
     throw error;
   }
 }
