@@ -13,7 +13,7 @@ const updateFamilySchema = z.object({
   members: z
     .array(
       z.object({
-        name: z.string().min(2),
+        name: z.string().default(""),
         gender: z.string().default("OTHER"),
         age: z.coerce.number().min(0),
       })
@@ -79,9 +79,13 @@ export async function PUT(
       });
 
       await prisma.participant.createMany({
-        data: members.map((m) => ({
+        data: members.map((m, index) => ({
           familyId,
-          name: m.name,
+          name: m.name && m.name.trim().length > 0
+            ? m.name.trim()
+            : index === 0
+            ? familyData.responsibleName?.trim() || "Responsável"
+            : `Convidado ${index}`,
           gender: m.gender,
           age: m.age,
           isPaying: m.age >= event.minPayingAge,

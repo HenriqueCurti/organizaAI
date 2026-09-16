@@ -83,7 +83,7 @@ export async function POST(
           ? m.name.trim()
           : index === 0
           ? responsibleName.trim()
-          : `Membro ${index + 1}`,
+          : `Convidado ${index}`,
       gender: m.gender,
       age: m.age,
       isPaying: m.age >= event.minPayingAge,

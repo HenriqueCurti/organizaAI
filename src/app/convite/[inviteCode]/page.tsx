@@ -196,7 +196,7 @@ export default function PublicInvitePage({
         responsibleEmail: formData.responsibleEmail.trim(),
         members: formData.members.map((m, idx) => ({
           ...m,
-          name: m.name.trim() || (idx === 0 ? formData.responsibleName.trim() : `Membro ${idx + 1}`),
+          name: m.name.trim() || (idx === 0 ? formData.responsibleName.trim() : `Convidado ${idx}`),
         })),
       };
 
@@ -866,15 +866,6 @@ export default function PublicInvitePage({
                     O responsável já está incluído abaixo. Adicione os acompanhantes.
                   </span>
                 </div>
-
-                <button
-                  type="button"
-                  onClick={handleAddMember}
-                  className="inline-flex items-center gap-1 text-xs font-bold text-emerald-600 dark:text-emerald-400 hover:underline"
-                >
-                  <Plus className="w-4 h-4" />
-                  Adicionar Pessoa
-                </button>
               </div>
 
               <div className="space-y-2.5">
@@ -907,7 +898,7 @@ export default function PublicInvitePage({
                       <div className="flex flex-col sm:flex-row sm:items-center gap-2">
                         <input
                           type="text"
-                          required
+                          required={isResponsible}
                           placeholder={isResponsible ? "Seu nome completo" : "Nome (ex: Esposa, Filho, etc.)"}
                           value={isResponsible ? (member.name || formData.responsibleName) : member.name}
                           onChange={(e) => {
@@ -974,6 +965,15 @@ export default function PublicInvitePage({
                   );
                 })}
               </div>
+
+              <button
+                type="button"
+                onClick={handleAddMember}
+                className="w-full sm:w-auto mt-2 inline-flex items-center justify-center gap-1.5 px-4 py-2.5 text-xs font-bold text-emerald-700 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 dark:border-emerald-900/60 dark:text-emerald-300 dark:bg-emerald-950/30 dark:hover:bg-emerald-900/50 rounded-xl transition-all"
+              >
+                <Plus className="w-4 h-4" />
+                Adicionar Pessoa
+              </button>
             </div>
 
             {/* Simulação em Tempo Real da Cota da Família */}

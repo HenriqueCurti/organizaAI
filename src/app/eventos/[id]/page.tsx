@@ -851,8 +851,8 @@ export default function EventDetailPage({
           familyName: editingFamily.familyName,
           responsibleName: editingFamily.responsibleName,
           responsiblePhone: editingFamily.responsiblePhone,
-          members: editingFamily.members.map((m) => ({
-            name: m.name,
+          members: editingFamily.members.map((m, idx) => ({
+            name: m.name.trim() || (idx === 0 ? editingFamily.responsibleName.trim() : `Convidado ${idx}`),
             gender: m.gender,
             age: parseInt(m.age) || 0,
           })),
@@ -2776,19 +2776,6 @@ export default function EventDetailPage({
                     <span className="text-xs font-bold text-slate-700 dark:text-slate-300">
                       Membros da Família ({newFamily.members.length})
                     </span>
-                    <button
-                      type="button"
-                      onClick={() =>
-                        setNewFamily({
-                          ...newFamily,
-                          members: [...newFamily.members, { name: "", gender: "OTHER", age: "18" }],
-                        })
-                      }
-                      className="text-xs font-bold text-emerald-600 dark:text-emerald-400 hover:underline flex items-center gap-1"
-                    >
-                      <Plus className="w-3.5 h-3.5" />
-                      Adicionar Membro
-                    </button>
                   </div>
 
                   <div className="space-y-2.5 max-h-52 overflow-y-auto pr-1">
@@ -2818,7 +2805,7 @@ export default function EventDetailPage({
 
                           <input
                             type="text"
-                            required
+                            required={isResponsible}
                             placeholder={isResponsible ? "Nome do responsável" : "Nome do membro"}
                             value={isResponsible ? (member.name || newFamily.responsibleName) : member.name}
                             onChange={(e) => {
@@ -2876,7 +2863,22 @@ export default function EventDetailPage({
                       );
                     })}
                   </div>
+
+                  <button
+                    type="button"
+                    onClick={() =>
+                      setNewFamily({
+                        ...newFamily,
+                        members: [...newFamily.members, { name: "", gender: "OTHER", age: "18" }],
+                      })
+                    }
+                    className="w-full mt-2 inline-flex items-center justify-center gap-1.5 px-4 py-2 text-xs font-bold text-emerald-700 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 dark:border-emerald-900/60 dark:text-emerald-300 dark:bg-emerald-950/30 dark:hover:bg-emerald-900/50 rounded-xl transition-all"
+                  >
+                    <Plus className="w-4 h-4" />
+                    Adicionar Membro
+                  </button>
                 </div>
+
 
                 <div className="flex items-center justify-end gap-3 pt-4 border-t border-slate-100 dark:border-slate-800">
                   <button
@@ -3300,19 +3302,6 @@ export default function EventDetailPage({
                     <span className="text-xs font-bold text-slate-700 dark:text-slate-300">
                       Membros da Família ({editingFamily.members.length})
                     </span>
-                    <button
-                      type="button"
-                      onClick={() =>
-                        setEditingFamily({
-                          ...editingFamily,
-                          members: [...editingFamily.members, { name: "", gender: "OTHER", age: "18" }],
-                        })
-                      }
-                      className="text-xs font-bold text-emerald-600 dark:text-emerald-400 hover:underline flex items-center gap-1"
-                    >
-                      <Plus className="w-3.5 h-3.5" />
-                      Adicionar Membro
-                    </button>
                   </div>
 
                   <div className="space-y-2.5 max-h-56 overflow-y-auto pr-1">
@@ -3327,7 +3316,7 @@ export default function EventDetailPage({
                         >
                           <input
                             type="text"
-                            required
+                            required={idx === 0}
                             placeholder="Nome do participante"
                             value={member.name}
                             onChange={(e) => {
@@ -3396,6 +3385,20 @@ export default function EventDetailPage({
                       );
                     })}
                   </div>
+
+                  <button
+                    type="button"
+                    onClick={() =>
+                      setEditingFamily({
+                        ...editingFamily,
+                        members: [...editingFamily.members, { name: "", gender: "OTHER", age: "18" }],
+                      })
+                    }
+                    className="w-full mt-2 inline-flex items-center justify-center gap-1.5 px-4 py-2 text-xs font-bold text-emerald-700 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 dark:border-emerald-900/60 dark:text-emerald-300 dark:bg-emerald-950/30 dark:hover:bg-emerald-900/50 rounded-xl transition-all"
+                  >
+                    <Plus className="w-4 h-4" />
+                    Adicionar Membro
+                  </button>
                 </div>
 
                 <div className="flex items-center justify-end gap-3 pt-4 border-t border-slate-100 dark:border-slate-800">
