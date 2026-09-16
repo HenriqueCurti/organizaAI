@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getCurrentUser } from "@/lib/auth";
+import { calculateFamilyQuotas } from "@/lib/quotaUtils";
 import { z } from "zod";
 
 const createPaymentSchema = z.object({
@@ -56,16 +57,18 @@ export async function GET(
 
   // Rateio
   const totalCosts = event.costs.reduce((sum, c) => sum + c.amount, 0);
-  let totalPayingParticipants = 0;
-  event.families.forEach((f) => {
-    f.members.forEach((m) => {
-      if (m.age >= event.minPayingAge) totalPayingParticipants++;
-    });
+  const isClosed = event.status === "CLOSED";
+
+  const { familyQuotas } = calculateFamilyQuotas({
+    families: event.families,
+    totalCosts,
+    minPayingAge: event.minPayingAge,
+    estimatedPayingAttendees: event.estimatedPayingAttendees,
+    isClosed
   });
 
-  const costPerQuota = totalPayingParticipants > 0 ? totalCosts / totalPayingParticipants : 0;
+  const familyTotalCost = familyQuotas.get(familyId) || 0;
   const payingCount = family.members.filter((m) => m.age >= event.minPayingAge).length;
-  const familyTotalCost = Number((payingCount * costPerQuota).toFixed(2));
   const familyTotalPaid = Number(
     family.payments.reduce((sum, p) => sum + p.amount, 0).toFixed(2)
   );
@@ -164,15 +167,17 @@ export async function POST(
     const newTotalPaid = allPayments.reduce((sum, p) => sum + p.amount, 0);
 
     const totalCosts = event.costs.reduce((sum, c) => sum + c.amount, 0);
-    let totalPayingParticipants = 0;
-    event.families.forEach((f) => {
-      f.members.forEach((m) => {
-        if (m.age >= event.minPayingAge) totalPayingParticipants++;
-      });
+    const isClosed = event.status === "CLOSED";
+
+    const { familyQuotas } = calculateFamilyQuotas({
+      families: event.families,
+      totalCosts,
+      minPayingAge: event.minPayingAge,
+      estimatedPayingAttendees: event.estimatedPayingAttendees,
+      isClosed
     });
-    const costPerQuota = totalPayingParticipants > 0 ? totalCosts / totalPayingParticipants : 0;
-    const payingCount = family.members.filter((m) => m.age >= event.minPayingAge).length;
-    const familyTotalCost = Number((payingCount * costPerQuota).toFixed(2));
+
+    const familyTotalCost = familyQuotas.get(familyId) || 0;
 
     let newStatus: string = "PENDING";
     if (newTotalPaid >= familyTotalCost && familyTotalCost > 0) {

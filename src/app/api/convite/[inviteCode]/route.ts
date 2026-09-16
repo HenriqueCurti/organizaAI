@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { hashPassword, getCurrentUser } from "@/lib/auth";
+import { calculateFamilyQuotas } from "@/lib/quotaUtils";
 import { z } from "zod";
 
 const rsvpSchema = z.object({
@@ -62,6 +63,8 @@ export async function GET(
       },
       families: {
         select: {
+          id: true,
+          createdAt: true,
           members: {
             select: {
               age: true,
@@ -76,24 +79,20 @@ export async function GET(
     return NextResponse.json({ error: "Convite inválido ou evento não encontrado" }, { status: 404 });
   }
 
-  const totalCosts = event.costs.reduce((sum, c) => sum + c.amount, 0);
-  let totalPayingParticipants = 0;
-
-  event.families.forEach((f) => {
-    f.members.forEach((m) => {
-      if (m.age >= event.minPayingAge) {
-        totalPayingParticipants++;
-      }
-    });
-  });
-
+  const totalCosts = event.costs.reduce((sum, cost) => sum + cost.amount, 0);
   const isClosed = event.status === "CLOSED";
-  const effectiveDivisor = isClosed
-    ? (totalPayingParticipants > 0 ? totalPayingParticipants : (event.estimatedPayingAttendees || 1))
-    : Math.max(totalPayingParticipants, event.estimatedPayingAttendees || 1);
 
-  const estimatedCostPerQuota =
-    effectiveDivisor > 0 ? totalCosts / effectiveDivisor : 0;
+  const {
+    familyQuotas,
+    costPerQuota: estimatedCostPerQuota,
+    actualPayingParticipants: totalPayingParticipants
+  } = calculateFamilyQuotas({
+    families: event.families,
+    totalCosts,
+    minPayingAge: event.minPayingAge,
+    estimatedPayingAttendees: event.estimatedPayingAttendees,
+    isClosed
+  });
 
   const currentUser = await getCurrentUser();
 
@@ -117,7 +116,7 @@ export async function GET(
 
     if (existingFamily) {
       const familyPayingCount = existingFamily.members.filter((m) => m.age >= event.minPayingAge).length;
-      const familyTotalCost = Number((familyPayingCount * estimatedCostPerQuota).toFixed(2));
+      const familyTotalCost = familyQuotas.get(existingFamily.id) || 0;
       const familyTotalPaid = Number(
         existingFamily.payments.reduce((sum, p) => sum + p.amount, 0).toFixed(2)
       );

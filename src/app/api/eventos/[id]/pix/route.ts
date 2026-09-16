@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { generatePixPayload, generatePixQrCode } from "@/lib/pix";
+import { calculateFamilyQuotas } from "@/lib/quotaUtils";
 
 export async function GET(
   req: Request,
@@ -34,19 +35,15 @@ export async function GET(
 
   // Rateio
   const totalCosts = event.costs.reduce((sum, c) => sum + c.amount, 0);
-  let totalPayingParticipants = 0;
-  event.families.forEach((f) => {
-    f.members.forEach((m) => {
-      if (m.age >= event.minPayingAge) totalPayingParticipants++;
-    });
-  });
-
   const isClosed = event.status === "CLOSED";
-  const effectiveDivisor = isClosed
-    ? (totalPayingParticipants > 0 ? totalPayingParticipants : (event.estimatedPayingAttendees || 1))
-    : Math.max(totalPayingParticipants, event.estimatedPayingAttendees || 1);
 
-  const costPerQuota = effectiveDivisor > 0 ? totalCosts / effectiveDivisor : 0;
+  const { familyQuotas, costPerQuota } = calculateFamilyQuotas({
+    families: event.families,
+    totalCosts,
+    minPayingAge: event.minPayingAge,
+    estimatedPayingAttendees: event.estimatedPayingAttendees,
+    isClosed
+  });
 
   let amountToPay = costPerQuota;
   let familyTotalCost = costPerQuota;
@@ -57,8 +54,7 @@ export async function GET(
   if (familyId) {
     const family = event.families.find((f) => f.id === familyId);
     if (family) {
-      const payingCount = family.members.filter((m) => m.age >= event.minPayingAge).length;
-      familyTotalCost = Number((payingCount * costPerQuota).toFixed(2));
+      familyTotalCost = familyQuotas.get(familyId) || 0;
       const paymentsSum = family.payments.reduce((sum, p) => sum + p.amount, 0);
       familyTotalPaid = Number(
         (family.payments.length > 0

@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getCurrentUser } from "@/lib/auth";
 import { z } from "zod";
+import { calculateFamilyQuotas } from "@/lib/quotaUtils";
 
 const updateEventSchema = z.object({
   title: z.string().min(3).optional(),
@@ -68,31 +69,22 @@ export async function GET(
 
   // Fórmulas de Rateio
   const totalCosts = event.costs.reduce((sum, cost) => sum + cost.amount, 0);
-
-  // Participantes pagantes reais (idade >= minPayingAge)
-  let actualPayingParticipants = 0;
-  let actualExemptParticipants = 0;
-
-  event.families.forEach((family) => {
-    family.members.forEach((member) => {
-      if (member.age >= event.minPayingAge) {
-        actualPayingParticipants += 1;
-      } else {
-        actualExemptParticipants += 1;
-      }
-    });
-  });
-
   const isClosed = event.status === "CLOSED";
   const paymentsEnabled = isClosed;
 
-  // Se o evento está ABERTO:
-  // Divisor projetado = Math.max(actualPayingParticipants, event.estimatedPayingAttendees || 1)
-  // Se o evento está FECHADO:
-  // Divisor definitivo = actualPayingParticipants > 0 ? actualPayingParticipants : (event.estimatedPayingAttendees || 1)
-  const effectiveDivisor = isClosed
-    ? (actualPayingParticipants > 0 ? actualPayingParticipants : (event.estimatedPayingAttendees || 1))
-    : Math.max(actualPayingParticipants, event.estimatedPayingAttendees || 1);
+  const {
+    familyQuotas,
+    actualPayingParticipants,
+    actualExemptParticipants,
+    effectiveDivisor,
+    costPerQuota
+  } = calculateFamilyQuotas({
+    families: event.families,
+    totalCosts,
+    minPayingAge: event.minPayingAge,
+    estimatedPayingAttendees: event.estimatedPayingAttendees,
+    isClosed
+  });
 
   const isProjectedQuota = !isClosed;
   const isEstimatedRateio = actualPayingParticipants === 0;
@@ -107,14 +99,11 @@ export async function GET(
     ? actualExemptParticipants
     : Math.max(0, effectiveTotalParticipants - effectivePayingParticipants);
 
-  const costPerQuota =
-    effectivePayingParticipants > 0 ? totalCosts / effectivePayingParticipants : 0;
-
   // Resumo por família
   const familiesSummary = event.families.map((family) => {
     const payingCount = family.members.filter((m) => m.age >= event.minPayingAge).length;
     const exemptCount = family.members.length - payingCount;
-    const familyTotalCost = Number((payingCount * costPerQuota).toFixed(2));
+    const familyTotalCost = familyQuotas.get(family.id) || 0;
 
     const paymentsSum = family.payments.reduce((sum, p) => sum + p.amount, 0);
     const familyTotalPaid = Number(
