@@ -497,17 +497,19 @@ function EventCard({
               return mapUrl ? (
                 <div className="flex items-center gap-2">
                   <MapPin className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400 shrink-0" />
-                  <a
-                    href={mapUrl}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    onClick={(e) => e.stopPropagation()}
-                    className="truncate hover:text-emerald-600 dark:hover:text-emerald-400 hover:underline inline-flex items-center gap-1 transition-colors"
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.preventDefault();
+                      e.stopPropagation();
+                      window.open(mapUrl, "_blank");
+                    }}
+                    className="truncate hover:text-emerald-600 dark:hover:text-emerald-400 hover:underline inline-flex items-center gap-1 transition-colors text-left"
                     title="Abrir no Google Maps"
                   >
                     <span className="truncate">{event.locationName || "Ver no Google Maps"}</span>
                     <ExternalLink className="w-3 h-3 text-slate-400 shrink-0 opacity-70" />
-                  </a>
+                  </button>
                 </div>
               ) : (
                 <div className="flex items-center gap-2">
