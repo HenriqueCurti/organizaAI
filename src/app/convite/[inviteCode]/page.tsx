@@ -103,7 +103,7 @@ export default function PublicInvitePage({
     responsibleEmail: "",
     createAccount: false,
     password: "",
-    members: [{ name: "", gender: "MALE", age: "30" }],
+    members: [{ name: "", gender: "MALE", age: "99" }],
   });
 
   useEffect(() => {
@@ -163,7 +163,7 @@ export default function PublicInvitePage({
   const handleAddMember = () => {
     setFormData({
       ...formData,
-      members: [...formData.members, { name: "", gender: "OTHER", age: "18" }],
+      members: [...formData.members, { name: "", gender: "OTHER", age: "99" }],
     });
   };
 
@@ -588,7 +588,7 @@ export default function PublicInvitePage({
                       className="inline-flex items-center gap-1 px-2.5 py-1 rounded-xl text-xs bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300"
                     >
                       <span>{m.name}</span>
-                      <span className="text-[10px] text-slate-400">({m.age} anos)</span>
+
                       {m.age >= event.minPayingAge ? (
                         <span className="text-[9px] font-bold text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-950/60 px-1.5 py-0.5 rounded">
                           Pagante
@@ -910,20 +910,23 @@ export default function PublicInvitePage({
                         />
 
                         <div className="flex items-center gap-2 w-full sm:w-auto">
-                          <input
-                            type="number"
+                          <select
                             required
-                            min={0}
-                            max={100}
-                            placeholder="Idade"
-                            value={member.age}
+                            value={Number(member.age) >= event.minPayingAge ? event.minPayingAge.toString() : "0"}
                             onChange={(e) => {
                               const updated = [...formData.members];
                               updated[idx].age = e.target.value;
                               setFormData({ ...formData, members: updated });
                             }}
-                            className="w-16 px-2 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-xs text-center text-slate-900 dark:text-white"
-                          />
+                            className="w-full sm:w-36 px-2 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-xs text-slate-900 dark:text-white"
+                          >
+                            <option value={event.minPayingAge.toString()}>
+                              {event.minPayingAge} anos ou mais (Pagante)
+                            </option>
+                            <option value="0">
+                              Menor de {event.minPayingAge} anos (Isento)
+                            </option>
+                          </select>
 
                           <select
                             value={member.gender}

@@ -168,7 +168,7 @@ export default function EventDetailPage({
     responsibleName: "",
     responsiblePhone: "",
     responsibleEmail: "",
-    members: [{ name: "", gender: "MALE", age: "30" }],
+    members: [{ name: "", gender: "MALE", age: "99" }],
   });
   const [editingFamily, setEditingFamily] = useState<{
     id: string;
@@ -649,7 +649,7 @@ export default function EventDetailPage({
         responsibleName: "",
         responsiblePhone: "",
         responsibleEmail: "",
-        members: [{ name: "", gender: "MALE", age: "30" }],
+        members: [{ name: "", gender: "MALE", age: "99" }],
       });
       setShowAddFamily(false);
       await fetchEvent();
@@ -1645,7 +1645,7 @@ export default function EventDetailPage({
                               className="flex items-center justify-between text-xs py-1 px-2 rounded-lg bg-slate-50 dark:bg-slate-900/50"
                             >
                               <span className="font-medium text-slate-800 dark:text-slate-200">
-                                {m.name} ({m.age} anos)
+                                {m.name}
                               </span>
                               <span
                                 className={`font-semibold px-2 py-0.5 rounded text-[10px] ${
@@ -2816,20 +2816,23 @@ export default function EventDetailPage({
                             className="w-full px-3 py-2 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-xs text-slate-900 dark:text-white"
                           />
                           <div className="flex items-center gap-2">
-                            <input
-                              type="number"
+                            <select
                               required
-                              min={0}
-                              max={100}
-                              placeholder="Idade"
-                              value={member.age}
+                              value={Number(member.age) >= event.minPayingAge ? event.minPayingAge.toString() : "0"}
                               onChange={(e) => {
                                 const updated = [...newFamily.members];
                                 updated[idx].age = e.target.value;
                                 setNewFamily({ ...newFamily, members: updated });
                               }}
-                              className="w-20 px-2 py-2 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-xs text-center text-slate-900 dark:text-white"
-                            />
+                              className="w-full sm:w-36 px-2 py-2 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-xs text-slate-900 dark:text-white"
+                            >
+                              <option value={event.minPayingAge.toString()}>
+                                {event.minPayingAge} anos ou mais (Pagante)
+                              </option>
+                              <option value="0">
+                                Menor de {event.minPayingAge} anos (Isento)
+                              </option>
+                            </select>
                             <select
                               value={member.gender}
                               onChange={(e) => {
@@ -2869,7 +2872,7 @@ export default function EventDetailPage({
                     onClick={() =>
                       setNewFamily({
                         ...newFamily,
-                        members: [...newFamily.members, { name: "", gender: "OTHER", age: "18" }],
+                        members: [...newFamily.members, { name: "", gender: "OTHER", age: "99" }],
                       })
                     }
                     className="w-full mt-2 inline-flex items-center justify-center gap-1.5 px-4 py-2 text-xs font-bold text-emerald-700 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 dark:border-emerald-900/60 dark:text-emerald-300 dark:bg-emerald-950/30 dark:hover:bg-emerald-900/50 rounded-xl transition-all"
@@ -3327,20 +3330,23 @@ export default function EventDetailPage({
                             className="w-full px-3 py-2 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-xs text-slate-900 dark:text-white"
                           />
                           <div className="flex items-center gap-2">
-                            <input
-                              type="number"
+                            <select
                               required
-                              min={0}
-                              max={100}
-                              placeholder="Idade"
-                              value={member.age}
+                              value={Number(member.age) >= event.minPayingAge ? event.minPayingAge.toString() : "0"}
                               onChange={(e) => {
                                 const updated = [...editingFamily.members];
                                 updated[idx].age = e.target.value;
                                 setEditingFamily({ ...editingFamily, members: updated });
                               }}
-                              className="w-20 px-2 py-2 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-xs text-center text-slate-900 dark:text-white"
-                            />
+                              className="w-full sm:w-36 px-2 py-2 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-xs text-slate-900 dark:text-white"
+                            >
+                              <option value={event.minPayingAge.toString()}>
+                                {event.minPayingAge} anos ou mais (Pagante)
+                              </option>
+                              <option value="0">
+                                Menor de {event.minPayingAge} anos (Isento)
+                              </option>
+                            </select>
                             <select
                               value={member.gender}
                               onChange={(e) => {
@@ -3391,7 +3397,7 @@ export default function EventDetailPage({
                     onClick={() =>
                       setEditingFamily({
                         ...editingFamily,
-                        members: [...editingFamily.members, { name: "", gender: "OTHER", age: "18" }],
+                        members: [...editingFamily.members, { name: "", gender: "OTHER", age: "99" }],
                       })
                     }
                     className="w-full mt-2 inline-flex items-center justify-center gap-1.5 px-4 py-2 text-xs font-bold text-emerald-700 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 dark:border-emerald-900/60 dark:text-emerald-300 dark:bg-emerald-950/30 dark:hover:bg-emerald-900/50 rounded-xl transition-all"

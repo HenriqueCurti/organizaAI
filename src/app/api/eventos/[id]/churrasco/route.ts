@@ -58,7 +58,7 @@ export async function GET(
 
   event.families.forEach((f) => {
     f.members.forEach((m) => {
-      if (m.age < 12) {
+      if (m.age < event.minPayingAge) {
         actualChildrenCount++;
       } else if (m.gender === "FEMALE") {
         actualWomenCount++;
