@@ -1162,7 +1162,7 @@ export default function EventDetailPage({
               </h1>
 
               {event.description && (
-                <p className="text-xs sm:text-sm text-slate-500 dark:text-slate-400 max-w-2xl leading-relaxed">
+                <p className="text-xs sm:text-sm text-slate-500 dark:text-slate-400 max-w-2xl leading-relaxed whitespace-pre-wrap">
                   {event.description}
                 </p>
               )}

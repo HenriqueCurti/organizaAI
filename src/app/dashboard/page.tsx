@@ -480,7 +480,7 @@ function EventCard({
         </h3>
 
         {event.description && (
-          <p className="text-xs text-slate-500 dark:text-slate-400 mt-1 line-clamp-2">
+          <p className="text-xs text-slate-500 dark:text-slate-400 mt-1 line-clamp-2 whitespace-pre-wrap">
             {event.description}
           </p>
         )}
