@@ -92,7 +92,7 @@ export async function POST(
             members.push({
               name: i === 1 ? responsibleName : `${responsibleName} (Acompanhante ${i})`,
               gender: i % 2 === 1 ? "MALE" : "FEMALE",
-              age: 30,
+              age: 99,
             });
           }
           // Adiciona crianças
@@ -100,7 +100,7 @@ export async function POST(
             members.push({
               name: `Criança ${i} (${responsibleName})`,
               gender: "OTHER",
-              age: 7, // menor que minPayingAge padrão (12)
+              age: 0,
             });
           }
         } else if (genericCountMatch) {
@@ -109,7 +109,7 @@ export async function POST(
             members.push({
               name: i === 1 ? responsibleName : `${responsibleName} (Acomp. ${i})`,
               gender: i % 2 === 1 ? "MALE" : "FEMALE",
-              age: 30,
+              age: 99,
             });
           }
         }
@@ -133,7 +133,7 @@ export async function POST(
             members.push({
               name: n,
               gender: idx % 2 === 0 ? "MALE" : "FEMALE",
-              age: 30,
+              age: 99,
             });
           });
         }
@@ -146,7 +146,7 @@ export async function POST(
         members.push({
           name: line,
           gender: "MALE",
-          age: 30,
+          age: 99,
         });
       }
 
