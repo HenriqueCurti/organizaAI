@@ -60,13 +60,35 @@ export async function PUT(
       return NextResponse.json({ error: "Status inválido." }, { status: 400 });
     }
 
-    const updated = await prisma.eventViewRequest.updateMany({
+    const request = await prisma.eventViewRequest.findFirst({
       where: { id: requestId, eventId: id },
+    });
+
+    if (!request) {
+      return NextResponse.json({ error: "Solicitação não encontrada." }, { status: 404 });
+    }
+
+    await prisma.eventViewRequest.update({
+      where: { id: requestId },
       data: { status },
     });
 
-    if (updated.count === 0) {
-      return NextResponse.json({ error: "Solicitação não encontrada." }, { status: 404 });
+    if (status === "APPROVED") {
+      // Create EventMember with role PARTICIPANT and canEdit false if not exists
+      const existingMember = await prisma.eventMember.findUnique({
+        where: { eventId_userId: { eventId: id, userId: request.userId } },
+      });
+
+      if (!existingMember) {
+        await prisma.eventMember.create({
+          data: {
+            eventId: id,
+            userId: request.userId,
+            role: "PARTICIPANT",
+            canEdit: false,
+          },
+        });
+      }
     }
 
     return NextResponse.json({ success: true });
