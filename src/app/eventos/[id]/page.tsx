@@ -37,6 +37,7 @@ import {
   ExternalLink,
   LocateFixed,
   Search,
+  Eye,
 } from "lucide-react";
 import { ConfirmDeleteModal } from "@/components/confirm-delete-modal";
 import { getGoogleMapsUrl, parseLocationInput } from "@/lib/maps";
@@ -118,6 +119,7 @@ interface EventDetail {
   actualExemptParticipants?: number;
   actualTotalParticipants?: number;
   inviteCode: string;
+  viewCode: string;
   isOwner: boolean;
   canEdit: boolean;
   pixKey: string | null;
@@ -143,8 +145,9 @@ export default function EventDetailPage({
   const router = useRouter();
   const [event, setEvent] = useState<EventDetail | null>(null);
   const [loading, setLoading] = useState(true);
-  const [activeTab, setActiveTab] = useState<"rateio" | "custos" | "churrasco" | "pix" | "organizadores">("rateio");
+  const [activeTab, setActiveTab] = useState<"rateio" | "custos" | "churrasco" | "pix" | "organizadores" | "viewRequests">("rateio");
   const [copiedLink, setCopiedLink] = useState(false);
+  const [copiedViewLink, setCopiedViewLink] = useState(false);
   const [copiedPix, setCopiedPix] = useState(false);
   const [statusLoading, setStatusLoading] = useState(false);
   const [copiedCobranca, setCopiedCobranca] = useState(false);
@@ -245,6 +248,8 @@ export default function EventDetailPage({
 
   // Co-organizadores & Membros
   const [membersList, setMembersList] = useState<EventMemberInfo[]>([]);
+  const [viewRequests, setViewRequests] = useState<any[]>([]);
+  const [requestActionLoading, setRequestActionLoading] = useState<string | null>(null);
   const [newMemberEmail, setNewMemberEmail] = useState("");
   const [newMemberCanEdit, setNewMemberCanEdit] = useState(true);
   const [memberActionLoading, setMemberActionLoading] = useState(false);
@@ -299,11 +304,45 @@ export default function EventDetailPage({
     }
   };
 
+  const fetchViewRequests = async () => {
+    try {
+      const res = await fetch(`/api/eventos/${id}/view-requests`);
+      const data = await res.json();
+      if (res.ok) {
+        setViewRequests(data.requests || []);
+      }
+    } catch (e) {
+      console.error(e);
+    }
+  };
+
   useEffect(() => {
     fetchEvent();
     fetchBbq();
     fetchMembers();
+    fetchViewRequests();
   }, [id]);
+
+  const handleUpdateViewRequest = async (requestId: string, status: "APPROVED" | "REJECTED") => {
+    setRequestActionLoading(requestId);
+    try {
+      const res = await fetch(`/api/eventos/${id}/view-requests`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ requestId, status }),
+      });
+      if (res.ok) {
+        await fetchViewRequests();
+      } else {
+        const err = await res.json();
+        alert(err.error || "Erro ao atualizar solicitação.");
+      }
+    } catch (e) {
+      alert("Falha de conexão com o servidor.");
+    } finally {
+      setRequestActionLoading(null);
+    }
+  };
 
   const handleCopyInvite = () => {
     if (!event) return;
@@ -311,6 +350,14 @@ export default function EventDetailPage({
     navigator.clipboard.writeText(url);
     setCopiedLink(true);
     setTimeout(() => setCopiedLink(false), 2500);
+  };
+
+  const handleCopyViewLink = () => {
+    if (!event) return;
+    const url = `${window.location.origin}/visualizar/${event.viewCode}`;
+    navigator.clipboard.writeText(url);
+    setCopiedViewLink(true);
+    setTimeout(() => setCopiedViewLink(false), 2500);
   };
 
   const handleToggleEventStatus = async (newStatus: "OPEN" | "CLOSED") => {
@@ -1069,6 +1116,24 @@ export default function EventDetailPage({
               </button>
             )}
 
+            <button
+              onClick={handleCopyViewLink}
+              className="inline-flex items-center justify-center gap-2 px-4 py-2.5 sm:py-2 rounded-xl text-xs font-semibold bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-700 transition-all flex-1 sm:flex-initial"
+              title="Copiar link apenas para visualização"
+            >
+              {copiedViewLink ? (
+                <>
+                  <Check className="w-4 h-4 text-emerald-500" />
+                  <span>Link de Visão Copiado!</span>
+                </>
+              ) : (
+                <>
+                  <Copy className="w-4 h-4 text-slate-400" />
+                  <span>Copiar Visualização</span>
+                </>
+              )}
+            </button>
+
             {event.canEdit && (
               event.status === "CLOSED" ? (
                 <button
@@ -1453,6 +1518,23 @@ export default function EventDetailPage({
           >
             <ShieldCheck className="w-4 h-4" />
             Organizadores & Admins ({membersList.length + 1})
+          </button>
+
+          <button
+            onClick={() => setActiveTab("viewRequests")}
+            className={`flex items-center gap-2 px-4 py-2.5 text-sm font-semibold border-b-2 whitespace-nowrap transition-colors ${
+              activeTab === "viewRequests"
+                ? "border-emerald-600 text-emerald-600 dark:text-emerald-400 dark:border-emerald-400"
+                : "border-transparent text-slate-500 hover:text-slate-800 dark:hover:text-slate-200"
+            }`}
+          >
+            <Eye className="w-4 h-4" />
+            Visualizações
+            {viewRequests.filter(r => r.status === "PENDING").length > 0 && (
+              <span className="bg-amber-500 text-white text-[10px] font-bold px-1.5 py-0.5 rounded-full">
+                {viewRequests.filter(r => r.status === "PENDING").length}
+              </span>
+            )}
           </button>
         </div>
 
@@ -2497,6 +2579,87 @@ export default function EventDetailPage({
                   )}
                 </div>
               </div>
+            </div>
+          </div>
+        )}
+
+        {/* ========================================================
+            ABA: VISUALIZAÇÕES
+            ======================================================== */}
+        {activeTab === "viewRequests" && (
+          <div className="space-y-6">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+              <div>
+                <h3 className="text-lg font-bold text-slate-900 dark:text-white flex items-center gap-2">
+                  <Eye className="w-5 h-5 text-emerald-500" />
+                  Solicitações de Visualização
+                </h3>
+                <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
+                  Gerencie quem pode visualizar os detalhes deste evento através do link restrito.
+                </p>
+              </div>
+            </div>
+
+            <div className="bg-white dark:bg-[#0f172a] rounded-2xl border border-slate-200 dark:border-slate-800 p-5 shadow-sm space-y-3">
+              {viewRequests.length === 0 ? (
+                <div className="text-center py-6 text-xs text-slate-400">
+                  Nenhuma solicitação de acesso no momento.
+                </div>
+              ) : (
+                <div className="space-y-2">
+                  {viewRequests.map((r) => (
+                    <div
+                      key={r.id}
+                      className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 p-3 rounded-xl bg-slate-50 dark:bg-slate-900/50 border border-slate-100 dark:border-slate-800"
+                    >
+                      <div className="flex items-center gap-3 min-w-0">
+                        <div className="w-8 h-8 rounded-full bg-slate-200 dark:bg-slate-800 text-slate-600 dark:text-slate-400 font-bold flex items-center justify-center text-xs shrink-0">
+                          {r.user.name.charAt(0).toUpperCase()}
+                        </div>
+                        <div className="min-w-0">
+                          <span className="text-xs font-bold text-slate-900 dark:text-white block truncate">
+                            {r.user.name}
+                          </span>
+                          <span className="text-[11px] text-slate-500 block truncate">{r.user.email}</span>
+                        </div>
+                      </div>
+
+                      <div className="flex items-center justify-between sm:justify-end gap-2.5 pt-1.5 sm:pt-0 border-t sm:border-t-0 border-slate-200/50 dark:border-slate-800/80">
+                        {r.status === "PENDING" && (
+                          <>
+                            <button
+                              onClick={() => handleUpdateViewRequest(r.id, "APPROVED")}
+                              disabled={requestActionLoading === r.id}
+                              className="text-[10px] font-bold px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white transition-colors disabled:opacity-50 inline-flex items-center gap-1"
+                            >
+                              {requestActionLoading === r.id ? <Loader2 className="w-3 h-3 animate-spin" /> : <CheckCircle2 className="w-3 h-3" />}
+                              Aprovar
+                            </button>
+                            <button
+                              onClick={() => handleUpdateViewRequest(r.id, "REJECTED")}
+                              disabled={requestActionLoading === r.id}
+                              className="text-[10px] font-bold px-3 py-1.5 rounded-lg bg-rose-100 dark:bg-rose-950 text-rose-700 dark:text-rose-400 hover:bg-rose-200 dark:hover:bg-rose-900 transition-colors disabled:opacity-50 inline-flex items-center gap-1"
+                            >
+                              {requestActionLoading === r.id ? <Loader2 className="w-3 h-3 animate-spin" /> : <X className="w-3 h-3" />}
+                              Recusar
+                            </button>
+                          </>
+                        )}
+                        {r.status === "APPROVED" && (
+                          <span className="text-xs font-semibold px-2.5 py-1 rounded-full bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300">
+                            Aprovado
+                          </span>
+                        )}
+                        {r.status === "REJECTED" && (
+                          <span className="text-xs font-semibold px-2.5 py-1 rounded-full bg-rose-100 text-rose-800 dark:bg-rose-950 dark:text-rose-300">
+                            Recusado
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
           </div>
         )}
