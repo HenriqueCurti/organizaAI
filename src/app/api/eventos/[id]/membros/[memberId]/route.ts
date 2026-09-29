@@ -96,5 +96,13 @@ export async function DELETE(
     where: { id: memberId, eventId },
   });
 
+  if (member) {
+    // If they had an approved view request, reject it so they can't still view the event
+    await prisma.eventViewRequest.updateMany({
+      where: { eventId, userId: member.userId, status: "APPROVED" },
+      data: { status: "REJECTED" },
+    });
+  }
+
   return NextResponse.json({ message: "Membro removido da administração com sucesso" });
 }

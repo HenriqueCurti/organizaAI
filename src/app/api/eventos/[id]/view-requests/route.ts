@@ -89,6 +89,14 @@ export async function PUT(
           },
         });
       }
+    } else if (status === "REJECTED") {
+      await prisma.eventMember.deleteMany({
+        where: {
+          eventId: id,
+          userId: request.userId,
+          role: "PARTICIPANT", // Delete only if they are a simple participant
+        },
+      });
     }
 
     return NextResponse.json({ success: true });

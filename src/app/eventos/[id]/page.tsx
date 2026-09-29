@@ -2646,9 +2646,23 @@ export default function EventDetailPage({
                           </>
                         )}
                         {r.status === "APPROVED" && (
-                          <span className="text-xs font-semibold px-2.5 py-1 rounded-full bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300">
-                            Aprovado
-                          </span>
+                          <div className="flex items-center gap-2">
+                            <span className="text-xs font-semibold px-2.5 py-1 rounded-full bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300">
+                              Aprovado
+                            </span>
+                            <button
+                              onClick={() => {
+                                if(confirm("Deseja revogar o acesso deste usuário? Ele não poderá mais visualizar o evento.")) {
+                                  handleUpdateViewRequest(r.id, "REJECTED");
+                                }
+                              }}
+                              disabled={requestActionLoading === r.id}
+                              title="Revogar Acesso"
+                              className="p-1.5 text-slate-400 hover:text-rose-500 rounded-lg hover:bg-rose-50 dark:hover:bg-rose-950/40 transition-colors disabled:opacity-50"
+                            >
+                              {requestActionLoading === r.id ? <Loader2 className="w-4 h-4 animate-spin text-rose-500" /> : <Trash2 className="w-4 h-4" />}
+                            </button>
+                          </div>
                         )}
                         {r.status === "REJECTED" && (
                           <span className="text-xs font-semibold px-2.5 py-1 rounded-full bg-rose-100 text-rose-800 dark:bg-rose-950 dark:text-rose-300">
