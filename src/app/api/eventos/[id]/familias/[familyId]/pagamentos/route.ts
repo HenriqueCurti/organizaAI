@@ -160,6 +160,17 @@ export async function POST(
       },
     });
 
+    await prisma.paymentLog.create({
+      data: {
+        paymentId: payment.id,
+        familyId,
+        userId: user.id,
+        action: "CREATED",
+        amount,
+        note: `Método: ${method}${note ? ' - ' + note : ''}`
+      }
+    });
+
     // Recalcular status da família
     const allPayments = await prisma.payment.findMany({
       where: { familyId },

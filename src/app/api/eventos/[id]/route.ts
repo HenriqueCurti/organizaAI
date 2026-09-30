@@ -52,6 +52,10 @@ export async function GET(
           payments: {
             orderBy: { paidAt: "desc" },
           },
+          paymentLogs: {
+            include: { user: { select: { name: true } } },
+            orderBy: { createdAt: "desc" }
+          },
         },
         orderBy: { createdAt: "asc" },
       },

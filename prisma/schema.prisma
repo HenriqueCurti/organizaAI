@@ -23,6 +23,7 @@ model User {
   families      Family[]
   verificationTokens VerificationToken[]
   viewRequests  EventViewRequest[]
+  paymentLogs   PaymentLog[]
 }
 
 model VerificationToken {
@@ -115,6 +116,7 @@ model Family {
   event            Event         @relation(fields: [eventId], references: [id], onDelete: Cascade)
   members          Participant[]
   payments         Payment[]
+  paymentLogs      PaymentLog[]
   createdAt        DateTime      @default(now())
   updatedAt        DateTime      @updatedAt
 }
@@ -166,4 +168,21 @@ model EventViewRequest {
   updatedAt DateTime @updatedAt
 
   @@unique([eventId, userId])
+}
+
+model PaymentLog {
+  id         String   @id @default(cuid())
+  paymentId  String?  // nullable se o pagamento for deletado
+  familyId   String
+  family     Family   @relation(fields: [familyId], references: [id], onDelete: Cascade)
+  userId     String
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  action     String   // CREATED, UPDATED, DELETED
+  amount     Float
+  note       String?
+  createdAt  DateTime @default(now())
+
+  @@index([familyId])
+  @@index([userId])
+  @@index([paymentId])
 }

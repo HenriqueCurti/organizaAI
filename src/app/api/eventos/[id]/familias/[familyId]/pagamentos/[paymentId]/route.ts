@@ -41,6 +41,17 @@ export async function DELETE(
     return NextResponse.json({ error: "Lançamento de pagamento não encontrado" }, { status: 404 });
   }
 
+  await prisma.paymentLog.create({
+    data: {
+      paymentId: payment.id,
+      familyId,
+      userId: user.id,
+      action: "DELETED",
+      amount: payment.amount,
+      note: `Método: ${payment.method}${payment.note ? ' - ' + payment.note : ''}`
+    }
+  });
+
   await prisma.payment.delete({
     where: { id: paymentId },
   });

@@ -59,6 +59,15 @@ interface PaymentRecord {
   note: string | null;
 }
 
+interface PaymentLogRecord {
+  id: string;
+  action: string;
+  amount: number;
+  note: string | null;
+  createdAt: string;
+  user?: { name: string };
+}
+
 interface Family {
   id: string;
   familyName: string;
@@ -73,6 +82,7 @@ interface Family {
   familyPendingAmount: number;
   members: Member[];
   payments: PaymentRecord[];
+  paymentLogs?: PaymentLogRecord[];
 }
 
 interface Cost {
@@ -4017,6 +4027,48 @@ export default function EventDetailPage({
                   </div>
                 )}
               </div>
+
+              {/* Log de Ações */}
+              {paymentModalFamily.paymentLogs && paymentModalFamily.paymentLogs.length > 0 && (
+                <div className="space-y-2 pt-3 border-t border-slate-100 dark:border-slate-800">
+                  <div className="flex items-center gap-1.5">
+                    <History className="w-4 h-4 text-slate-400" />
+                    <span className="text-xs font-bold text-slate-800 dark:text-slate-200">
+                      Log de Ações ({paymentModalFamily.paymentLogs.length})
+                    </span>
+                  </div>
+                  <div className="space-y-1.5 max-h-32 overflow-y-auto pr-1">
+                    {paymentModalFamily.paymentLogs.map((log) => (
+                      <div
+                        key={log.id}
+                        className="p-2.5 rounded-xl bg-slate-50 dark:bg-slate-900/40 border border-slate-100 dark:border-slate-800 text-[11px]"
+                      >
+                        <div className="flex justify-between items-start mb-1">
+                          <span className={`font-semibold ${log.action === 'DELETED' ? 'text-rose-500' : 'text-emerald-500'}`}>
+                            {log.action === 'DELETED' ? 'Estorno' : 'Lançamento'}
+                          </span>
+                          <span className="text-slate-400">
+                            {new Date(log.createdAt).toLocaleString("pt-BR", {
+                              day: "2-digit", month: "2-digit", year: "2-digit", hour: "2-digit", minute: "2-digit"
+                            })}
+                          </span>
+                        </div>
+                        <div className="text-slate-600 dark:text-slate-300">
+                          Usuário: <span className="font-medium">{log.user?.name || "Desconhecido"}</span>
+                        </div>
+                        <div className="text-slate-600 dark:text-slate-300">
+                          Valor: R$ {log.amount.toFixed(2)}
+                        </div>
+                        {log.note && (
+                          <div className="text-slate-500 mt-0.5 truncate">
+                            {log.note}
+                          </div>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
 
               <div className="flex justify-end pt-2">
                 <button
