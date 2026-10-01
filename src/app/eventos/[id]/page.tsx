@@ -1177,6 +1177,17 @@ export default function EventDetailPage({
             )}
 
             {event.canEdit && (
+              <Link
+                href={`/eventos/${event.id}/relatorio`}
+                className="inline-flex items-center justify-center gap-1.5 px-3.5 py-2.5 sm:py-2 rounded-xl text-xs font-semibold bg-white hover:bg-slate-50 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-700 transition-all shadow-sm"
+                title="Exportar Relatório em PDF"
+              >
+                <FileText className="w-3.5 h-3.5" />
+                <span className="hidden sm:inline">Relatório PDF</span>
+              </Link>
+            )}
+
+            {event.canEdit && (
               <button
                 onClick={handleOpenEditEventModal}
                 className="inline-flex items-center justify-center gap-1.5 px-3.5 py-2.5 sm:py-2 rounded-xl text-xs font-semibold bg-white hover:bg-slate-50 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-700 transition-all shadow-sm"
