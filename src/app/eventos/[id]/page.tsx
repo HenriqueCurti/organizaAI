@@ -1179,6 +1179,8 @@ export default function EventDetailPage({
             {event.canEdit && (
               <Link
                 href={`/eventos/${event.id}/relatorio`}
+                target="_blank"
+                rel="noopener noreferrer"
                 className="inline-flex items-center justify-center gap-1.5 px-3.5 py-2.5 sm:py-2 rounded-xl text-xs font-semibold bg-white hover:bg-slate-50 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-700 transition-all shadow-sm"
                 title="Exportar Relatório em PDF"
               >

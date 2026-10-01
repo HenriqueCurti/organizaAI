@@ -343,7 +343,6 @@ export default function RelatorioEventoPage({
                       <thead className="bg-white">
                         <tr>
                           <th className="px-4 py-2 text-left text-xs font-medium text-gray-400 uppercase">Participante</th>
-                          <th className="px-4 py-2 text-center text-xs font-medium text-gray-400 uppercase">Idade</th>
                           <th className="px-4 py-2 text-right text-xs font-medium text-gray-400 uppercase">Cota</th>
                         </tr>
                       </thead>
@@ -359,9 +358,6 @@ export default function RelatorioEventoPage({
                                   Isento
                                 </span>
                               )}
-                            </td>
-                            <td className="px-4 py-2.5 text-sm text-gray-500 text-center">
-                              {member.age} anos
                             </td>
                             <td className="px-4 py-2.5 text-sm text-right font-medium">
                               {member.isPaying ? formatCurrency(event.costPerQuota) : formatCurrency(0)}
