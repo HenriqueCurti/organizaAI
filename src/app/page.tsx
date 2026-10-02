@@ -14,6 +14,7 @@ import {
   Bot,
   ShieldCheck,
 } from "lucide-react";
+import { LandingChurrascometro } from "@/components/landing-churrascometro";
 
 export default async function LandingPage() {
   const user = await getCurrentUser();
@@ -81,6 +82,11 @@ export default async function LandingPage() {
               </div>
             </div>
           </div>
+        </section>
+
+        {/* Churrascômetro Público */}
+        <section className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 mb-16">
+          <LandingChurrascometro />
         </section>
 
         {/* Prévia Visual do Card de Rateio */}
