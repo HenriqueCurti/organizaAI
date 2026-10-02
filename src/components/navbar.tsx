@@ -17,6 +17,8 @@ import {
   ChevronRight,
   ShieldCheck,
   Loader2,
+  Calculator,
+  Eye,
 } from "lucide-react";
 import { useState, useEffect } from "react";
 
@@ -116,14 +118,32 @@ export function Navbar() {
 
           {/* Desktop Navigation (>= md) */}
           <nav className="hidden md:flex items-center gap-1.5 lg:gap-2">
-            {!user && (
+            {!user && pathname === "/" && (
+              <>
+                <Link
+                  href="#churrascometro"
+                  className="px-3 py-2 rounded-xl text-sm font-medium transition-colors text-slate-600 dark:text-slate-300 hover:text-emerald-600 dark:hover:text-emerald-400 hover:bg-slate-100 dark:hover:bg-slate-800/60"
+                >
+                  Calculadora
+                </Link>
+                <Link
+                  href="#exemplo"
+                  className="px-3 py-2 rounded-xl text-sm font-medium transition-colors text-slate-600 dark:text-slate-300 hover:text-emerald-600 dark:hover:text-emerald-400 hover:bg-slate-100 dark:hover:bg-slate-800/60"
+                >
+                  Exemplo
+                </Link>
+                <Link
+                  href="#recursos"
+                  className="px-3 py-2 rounded-xl text-sm font-medium transition-colors text-slate-600 dark:text-slate-300 hover:text-emerald-600 dark:hover:text-emerald-400 hover:bg-slate-100 dark:hover:bg-slate-800/60"
+                >
+                  Recursos
+                </Link>
+              </>
+            )}
+            {!user && pathname !== "/" && (
               <Link
                 href="/"
-                className={`px-3 py-2 rounded-xl text-sm font-medium transition-colors ${
-                  isActive("/") && pathname === "/"
-                    ? "text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/40"
-                    : "text-slate-600 dark:text-slate-300 hover:text-emerald-600 dark:hover:text-emerald-400 hover:bg-slate-100 dark:hover:bg-slate-800/60"
-                }`}
+                className="px-3 py-2 rounded-xl text-sm font-medium transition-colors text-slate-600 dark:text-slate-300 hover:text-emerald-600 dark:hover:text-emerald-400 hover:bg-slate-100 dark:hover:bg-slate-800/60"
               >
                 Início
               </Link>
@@ -302,15 +322,48 @@ export function Navbar() {
 
           {/* Navigation Links */}
           <nav className="flex flex-col gap-1.5">
-            {!user && (
+            {!user && pathname === "/" && (
+              <>
+                <Link
+                  href="#churrascometro"
+                  onClick={() => setMobileMenuOpen(false)}
+                  className="flex items-center justify-between min-h-[46px] px-3.5 py-2.5 rounded-xl text-sm font-semibold transition-colors text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800/60"
+                >
+                  <div className="flex items-center gap-3">
+                    <Calculator className="w-5 h-5 text-slate-400 dark:text-slate-500" />
+                    <span>Calculadora</span>
+                  </div>
+                  <ChevronRight className="w-4 h-4 text-slate-300 dark:text-slate-600" />
+                </Link>
+                <Link
+                  href="#exemplo"
+                  onClick={() => setMobileMenuOpen(false)}
+                  className="flex items-center justify-between min-h-[46px] px-3.5 py-2.5 rounded-xl text-sm font-semibold transition-colors text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800/60"
+                >
+                  <div className="flex items-center gap-3">
+                    <Eye className="w-5 h-5 text-slate-400 dark:text-slate-500" />
+                    <span>Exemplo ao Vivo</span>
+                  </div>
+                  <ChevronRight className="w-4 h-4 text-slate-300 dark:text-slate-600" />
+                </Link>
+                <Link
+                  href="#recursos"
+                  onClick={() => setMobileMenuOpen(false)}
+                  className="flex items-center justify-between min-h-[46px] px-3.5 py-2.5 rounded-xl text-sm font-semibold transition-colors text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800/60"
+                >
+                  <div className="flex items-center gap-3">
+                    <ShieldCheck className="w-5 h-5 text-slate-400 dark:text-slate-500" />
+                    <span>Recursos</span>
+                  </div>
+                  <ChevronRight className="w-4 h-4 text-slate-300 dark:text-slate-600" />
+                </Link>
+              </>
+            )}
+            {!user && pathname !== "/" && (
               <Link
                 href="/"
                 onClick={() => setMobileMenuOpen(false)}
-                className={`flex items-center justify-between min-h-[46px] px-3.5 py-2.5 rounded-xl text-sm font-semibold transition-colors ${
-                  isActive("/") && pathname === "/"
-                    ? "bg-emerald-50 dark:bg-emerald-950/50 text-emerald-600 dark:text-emerald-400"
-                    : "text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800/60"
-                }`}
+                className="flex items-center justify-between min-h-[46px] px-3.5 py-2.5 rounded-xl text-sm font-semibold transition-colors text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800/60"
               >
                 <div className="flex items-center gap-3">
                   <Home className="w-5 h-5 text-slate-400 dark:text-slate-500" />
