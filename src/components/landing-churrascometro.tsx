@@ -205,6 +205,15 @@ export function LandingChurrascometro() {
             </div>
           </div>
 
+          <div className="bg-emerald-50 dark:bg-[#0b141a] p-4 rounded-2xl border border-emerald-100 dark:border-emerald-900/30 relative shadow-inner">
+            <span className="text-[10px] uppercase font-bold text-emerald-600 dark:text-emerald-500 mb-2 block tracking-wider">
+              Mensagem Pronta para WhatsApp
+            </span>
+            <pre className="text-sm font-sans whitespace-pre-wrap text-slate-700 dark:text-slate-300 leading-relaxed">
+              {result.summary}
+            </pre>
+          </div>
+
           <div className="flex flex-col sm:flex-row gap-3">
             <button
               onClick={handleCopy}

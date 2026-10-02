@@ -30,31 +30,30 @@ export default async function LandingPage() {
         {/* Hero Section */}
         <section className="relative overflow-hidden pt-16 pb-20 md:pt-24 md:pb-28">
           <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 relative z-10 text-center">
-            <div className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-emerald-100/80 text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300 text-xs font-semibold mb-6 border border-emerald-200 dark:border-emerald-800/80">
+            <div className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-emerald-100/80 text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300 text-xs font-semibold mb-6 border border-emerald-200 dark:border-emerald-800/80 animate-in fade-in slide-in-from-bottom-4 duration-700">
               <Sparkles className="w-3.5 h-3.5" />
-              <span>O SaaS definitivo para confraternizações e ranchos</span>
+              <span>O SaaS definitivo para eventos entre amigos</span>
             </div>
 
-            <h1 className="text-4xl sm:text-6xl font-extrabold tracking-tight text-slate-900 dark:text-white max-w-4xl mx-auto leading-[1.15]">
+            <h1 className="text-4xl sm:text-6xl font-extrabold tracking-tight text-slate-900 dark:text-white max-w-4xl mx-auto leading-[1.15] animate-in fade-in zoom-in-95 duration-700 delay-150">
               Adeus planilha do Excel.{" "}
               <span className="text-transparent bg-clip-text bg-gradient-to-r from-emerald-600 via-teal-500 to-emerald-400">
                 Rateio de rancho & churrasco
               </span>{" "}
-              sem complicação.
+              sem estresse.
             </h1>
 
-            <p className="mt-6 text-lg sm:text-xl text-slate-600 dark:text-slate-400 max-w-2xl mx-auto">
-              Organize a confraternização anual, divida os custos por família com regras de idade,
-              cobre por Pix a custo zero e dimensione as carnes e bebidas com o churrascômetro inteligente.
+            <p className="mt-6 text-lg sm:text-xl text-slate-600 dark:text-slate-400 max-w-2xl mx-auto animate-in fade-in slide-in-from-bottom-4 duration-700 delay-300">
+              Organize confraternizações épicas sem dor de cabeça. Divida os custos automaticamente por família, receba via Pix (sem taxas) e nunca mais erre na conta de carnes com o nosso Churrascômetro Inteligente.
             </p>
 
-            <div className="mt-10 flex flex-col sm:flex-row items-center justify-center gap-4">
+            <div className="mt-10 flex flex-col sm:flex-row items-center justify-center gap-4 animate-in fade-in slide-in-from-bottom-4 duration-700 delay-500">
               <Link
                 href="/cadastro"
-                className="w-full sm:w-auto px-8 py-4 rounded-2xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-base shadow-xl shadow-emerald-600/25 transition-all hover:scale-[1.02] flex items-center justify-center gap-2"
+                className="w-full sm:w-auto px-8 py-4 rounded-2xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-base shadow-xl shadow-emerald-600/25 transition-all hover:scale-[1.02] flex items-center justify-center gap-2 group"
               >
                 <span>Criar Meu Evento Grátis</span>
-                <ArrowRight className="w-5 h-5" />
+                <ArrowRight className="w-5 h-5 group-hover:translate-x-1 transition-transform" />
               </Link>
 
               <Link
@@ -62,7 +61,7 @@ export default async function LandingPage() {
                 className="w-full sm:w-auto px-8 py-4 rounded-2xl bg-white dark:bg-slate-900 text-slate-700 dark:text-slate-300 hover:text-emerald-600 font-bold text-base border border-slate-200 dark:border-slate-800 shadow-sm transition-all hover:bg-slate-50 dark:hover:bg-slate-800/50 flex items-center justify-center gap-2"
               >
                 <Bot className="w-5 h-5 text-emerald-500" />
-                <span>API Swagger / Bots</span>
+                <span>API para Devs</span>
               </Link>
             </div>
 
